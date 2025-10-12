@@ -545,16 +545,23 @@ install_warp() {
         # Download and install Warp RPM package directly (as per official docs)
         log_info "Downloading Warp RPM package..."
         cd /tmp
-        wget "https://app.warp.dev/get_warp?package=rpm" -O warp.rpm
 
-        # Install Warp from downloaded RPM
-        log_info "Installing Warp from RPM package..."
-        sudo dnf install -y ./warp.rpm
-
-        # Cleanup
-        rm warp.rpm
-
-        log_success "Warp terminal installed"
+        # Use curl with redirect following to properly download the RPM
+        if curl -L "https://app.warp.dev/get_warp?package=rpm" -o warp.rpm; then
+            # Verify it's actually an RPM file
+            if file warp.rpm | grep -q "RPM"; then
+                # Install Warp from downloaded RPM
+                log_info "Installing Warp from RPM package..."
+                sudo dnf install -y ./warp.rpm
+                log_success "Warp terminal installed"
+            else
+                log_warning "Downloaded file is not a valid RPM package, skipping Warp installation"
+            fi
+            # Cleanup
+            rm -f warp.rpm
+        else
+            log_warning "Failed to download Warp RPM package, skipping installation"
+        fi
     else
         log_success "Warp terminal already installed"
     fi
