@@ -328,27 +328,19 @@ install_dust() {
 install_nodejs() {
     log_info "Installing Node.js using mise..."
 
-    # Check if mise is available (either in PATH or in ~/.local/bin)
-    if command_exists mise || [[ -f "$HOME/.local/bin/mise" ]]; then
-        # Ensure mise is in PATH and activated
-        if [[ -f "$HOME/.local/bin/mise" ]] && ! command_exists mise; then
-            export PATH="$HOME/.local/bin:$PATH"
-        fi
-
-        # Activate mise for this session
-        if command_exists mise; then
-            eval "$(mise activate zsh)" 2>/dev/null || true
-            mise install node@lts
-            mise use -g node@lts
+    if command_exists mise; then
+        log_info "Installing Node.js LTS using mise..."
+        if mise install node@lts 2>/dev/null && mise use -g node@lts 2>/dev/null; then
             log_success "Node.js (LTS) installed via mise"
-        elif [[ -f "$HOME/.local/bin/mise" ]]; then
-            eval "$($HOME/.local/bin/mise activate zsh)" 2>/dev/null || true
-            $HOME/.local/bin/mise install node@lts
-            $HOME/.local/bin/mise use -g node@lts
-            log_success "Node.js (LTS) installed via mise"
+        else
+            log_warning "Failed to install Node.js via mise, falling back to system package"
+            sudo dnf install -y nodejs npm
+            log_success "Node.js installed via system package manager"
         fi
     else
-        log_warning "mise not available, Node.js already installed via system packages"
+        log_warning "mise not available, installing Node.js via system package"
+        sudo dnf install -y nodejs npm
+        log_success "Node.js installed via system package manager"
     fi
 }
 
@@ -356,27 +348,16 @@ install_nodejs() {
 install_bun() {
     log_info "Installing Bun using mise..."
 
-    # Check if mise is available (either in PATH or in ~/.local/bin)
-    if command_exists mise || [[ -f "$HOME/.local/bin/mise" ]]; then
-        # Ensure mise is in PATH and activated
-        if [[ -f "$HOME/.local/bin/mise" ]] && ! command_exists mise; then
-            export PATH="$HOME/.local/bin:$PATH"
-        fi
-
-        # Activate mise for this session
-        if command_exists mise; then
-            eval "$(mise activate zsh)" 2>/dev/null || true
-            mise install bun@latest
-            mise use -g bun@latest
+    if command_exists mise; then
+        log_info "Installing Bun latest using mise..."
+        if mise install bun@latest 2>/dev/null && mise use -g bun@latest 2>/dev/null; then
             log_success "Bun installed via mise"
-        elif [[ -f "$HOME/.local/bin/mise" ]]; then
-            eval "$($HOME/.local/bin/mise activate zsh)" 2>/dev/null || true
-            $HOME/.local/bin/mise install bun@latest
-            $HOME/.local/bin/mise use -g bun@latest
-            log_success "Bun installed via mise"
+        else
+            log_warning "Failed to install Bun via mise, you can install it manually later"
         fi
     else
-        log_error "mise not available, skipping Bun installation"
+        log_warning "mise not available, skipping Bun installation"
+        log_info "You can install Bun manually later with: curl -fsSL https://bun.sh/install | bash"
     fi
 }
 
