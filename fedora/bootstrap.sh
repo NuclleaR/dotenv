@@ -403,20 +403,41 @@ install_docker() {
     log_info "Installing Docker..."
 
     if ! command_exists docker; then
-        # Install Docker using the official repository
-        sudo dnf remove -y docker docker-client docker-client-latest docker-common docker-latest docker-latest-logrotate docker-logrotate docker-selinux docker-engine-selinux docker-engine
+        # Uninstall old versions (as per official Docker docs)
+        log_info "Removing old Docker packages if they exist..."
+        sudo dnf remove -y docker \
+                          docker-client \
+                          docker-client-latest \
+                          docker-common \
+                          docker-latest \
+                          docker-latest-logrotate \
+                          docker-logrotate \
+                          docker-selinux \
+                          docker-engine-selinux \
+                          docker-engine 2>/dev/null || true
+
+        # Set up the repository (as per official Docker docs)
+        log_info "Installing dnf-plugins-core..."
+        sudo dnf -y install dnf-plugins-core
+
+        log_info "Adding Docker repository..."
         sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
+
+        # Install Docker Engine (as per official Docker docs)
+        log_info "Installing Docker packages..."
         sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
-        # Enable and start Docker service
-        sudo systemctl enable docker
-        sudo systemctl start docker
+        # Start Docker (as per official Docker docs)
+        log_info "Starting Docker service..."
+        sudo systemctl enable --now docker
 
-        # Add current user to docker group
+        # Add current user to docker group for non-root usage
+        log_info "Adding user to docker group..."
         sudo usermod -aG docker $USER
 
         log_success "Docker installed and configured"
         log_warning "Please log out and log back in for Docker group membership to take effect"
+        log_info "You can verify the installation with: sudo docker run hello-world"
     else
         log_success "Docker already installed"
     fi
