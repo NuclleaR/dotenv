@@ -73,8 +73,8 @@ install_rpm_fusion() {
 
     if ! rpm -qa | grep -q rpmfusion-free-release; then
         sudo dnf install -y \
-            https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm \
-            https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm
+            https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm \
+            https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm
         log_success "RPM Fusion repositories installed"
     else
         log_success "RPM Fusion repositories already installed"
