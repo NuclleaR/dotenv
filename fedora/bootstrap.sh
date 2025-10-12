@@ -403,35 +403,35 @@ install_docker() {
     log_info "Installing Docker..."
 
     if ! command_exists docker; then
-        # Uninstall old versions (as per official Docker docs)
+        # Uninstall old versions - EXACT commands from Docker docs
         log_info "Removing old Docker packages if they exist..."
-        sudo dnf remove -y docker \
-                          docker-client \
-                          docker-client-latest \
-                          docker-common \
-                          docker-latest \
-                          docker-latest-logrotate \
-                          docker-logrotate \
-                          docker-selinux \
-                          docker-engine-selinux \
-                          docker-engine 2>/dev/null || true
+        sudo dnf remove docker \
+                        docker-client \
+                        docker-client-latest \
+                        docker-common \
+                        docker-latest \
+                        docker-latest-logrotate \
+                        docker-logrotate \
+                        docker-selinux \
+                        docker-engine-selinux \
+                        docker-engine || true
 
-        # Set up the repository (as per official Docker docs)
+        # Set up the repository - EXACT commands from Docker docs
         log_info "Installing dnf-plugins-core..."
         sudo dnf -y install dnf-plugins-core
 
         log_info "Adding Docker repository..."
-        sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
+        sudo dnf-3 config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
 
-        # Install Docker Engine (as per official Docker docs)
+        # Install Docker Engine - EXACT commands from Docker docs
         log_info "Installing Docker packages..."
-        sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+        sudo dnf install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
-        # Start Docker (as per official Docker docs)
+        # Start Docker - EXACT commands from Docker docs
         log_info "Starting Docker service..."
         sudo systemctl enable --now docker
 
-        # Add current user to docker group for non-root usage
+        # Add current user to docker group
         log_info "Adding user to docker group..."
         sudo usermod -aG docker $USER
 
