@@ -656,6 +656,14 @@ main() {
     log_info "Please restart your terminal or run 'source ~/.zshrc' to apply all changes"
     log_warning "If you installed Docker, please log out and log back in for group membership to take effect"
 
+    # Apply shell changes immediately
+    log_info "Applying shell configuration changes..."
+    if [[ -f ~/.zshrc ]]; then
+        # Source the new configuration in current shell
+        source ~/.zshrc 2>/dev/null || true
+        log_success "Shell configuration reloaded"
+    fi
+
     # Show installed versions
     echo ""
     log_info "Installed versions:"
@@ -674,6 +682,24 @@ main() {
     echo "VS Code: $(code --version 2>/dev/null | head -n1 || echo 'Not available')"
     echo "Warp: $(warp-terminal --version 2>/dev/null || echo 'Not available')"
     echo "Vicinae: $(vicinae --version 2>/dev/null || (test -f /usr/local/bin/vicinae && echo 'Installed as AppImage') || echo 'Not available')"
+
+    echo ""
+    log_info "To fully apply all changes, you have the following options:"
+    echo "  1. Restart your terminal manually"
+    echo "  2. Run: source ~/.zshrc"
+    echo "  3. Log out and log back in (recommended for Docker group changes)"
+    echo ""
+
+    # Ask user if they want to restart the shell automatically
+    read -p "Would you like to start a new Zsh session now? (y/N): " -n 1 -r
+    echo ""
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        log_info "Starting new Zsh session..."
+        log_warning "Type 'exit' to return to the original shell"
+        exec zsh
+    else
+        log_info "You can manually restart your terminal or run 'source ~/.zshrc' when ready"
+    fi
 }
 
 # Run the main function
