@@ -425,7 +425,7 @@ install_docker() {
 
         # Install Docker Engine - EXACT commands from Docker docs
         log_info "Installing Docker packages..."
-        sudo dnf install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+        sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
         # Start Docker - EXACT commands from Docker docs
         log_info "Starting Docker service..."
@@ -499,7 +499,7 @@ install_additional_tools() {
     log_info "Installing additional useful tools..."
 
     local tools=(
-        "neofetch"     # System information tool
+        "fastfetch"    # System information tool (better than neofetch)
         "btop"         # Better top/htop
         # "tmux"         # Terminal multiplexer
         "jq"           # JSON processor
