@@ -122,8 +122,40 @@ install_zsh() {
         # Set Zsh as default shell if not already
         if [[ "$SHELL" != *"zsh" ]]; then
             log_info "Setting Zsh as default shell..."
-            chsh -s $(which zsh)
-            log_success "Zsh set as default shell"
+            local zsh_path=$(which zsh)
+
+            # Add zsh to /etc/shells if not already there
+            if ! grep -q "$zsh_path" /etc/shells 2>/dev/null; then
+                log_info "Adding zsh to /etc/shells..."
+                echo "$zsh_path" | sudo tee -a /etc/shells
+            fi
+
+            # Change shell - run both usermod and chsh for maximum compatibility
+            local usermod_success=false
+            local chsh_success=false
+
+            if sudo usermod -s "$zsh_path" "$USER"; then
+                log_success "Zsh set as default shell via usermod"
+                usermod_success=true
+            else
+                log_warning "usermod failed to set zsh as default shell"
+            fi
+
+            if chsh -s "$zsh_path"; then
+                log_success "Zsh set as default shell via chsh"
+                chsh_success=true
+            else
+                log_warning "chsh failed to set zsh as default shell"
+            fi
+
+            if [[ "$usermod_success" == true || "$chsh_success" == true ]]; then
+                log_success "Zsh successfully configured as default shell"
+                log_warning "Please log out and log back in for shell change to take effect"
+            else
+                log_error "Both usermod and chsh failed to set Zsh as default shell"
+                log_error "Bootstrap process stopped - Zsh must be set as default shell"
+                exit 1
+            fi
         else
             log_success "Zsh already set as default shell"
         fi
@@ -156,7 +188,7 @@ install_mise() {
 
     if ! command_exists mise; then
         log_info "Downloading and installing mise..."
-        curl https://mise.run/zsh | sh
+        curl https://mise.run | sh
 
         # The installer should automatically add activation to .zshrc, but let's verify
         if [[ -f "$HOME/.local/bin/mise" ]]; then
