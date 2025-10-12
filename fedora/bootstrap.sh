@@ -87,7 +87,7 @@ install_multimedia_codecs() {
     sudo dnf install -y @multimedia --setopt="install_weak_deps=False" --exclude=PackageKit-gstreamer-plugin
     sudo dnf install -y gstreamer1-plugins-{bad-\*,good-\*,base} gstreamer1-plugin-openh264 gstreamer1-libav --exclude=gstreamer1-plugins-bad-free-devel
     sudo dnf install -y lame\* --exclude=lame-devel
-    sudo dnf group upgrade -y --with-optional Multimedia
+    sudo dnf group upgrade -y --setopt=group_package_types=mandatory,default,optional Multimedia
     log_success "Multimedia codecs installed"
 }
 
@@ -583,7 +583,7 @@ main() {
     update_system
     install_development_packages
     install_rpm_fusion
-    install_multimedia_codecs
+    # install_multimedia_codecs
     install_flatpak
     install_zsh
     install_starship
