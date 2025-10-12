@@ -565,7 +565,7 @@ install_warp() {
         cd /tmp
 
         # Use curl with redirect following to properly download the RPM
-        if curl -L "https://app.warp.dev/get_warp?package=rpm" -o warp.rpm; then
+        if curl -L "https://app.warp.dev/download?package=rpm" -o warp.rpm; then
             # Verify it's actually an RPM file
             if file warp.rpm | grep -q "RPM"; then
                 # Install Warp from downloaded RPM
@@ -597,10 +597,61 @@ install_vicinae() {
         log_info "Installing Vicinae from COPR repository..."
         sudo dnf install -y vicinae
 
+        systemctl enable --user --now vicinae
+
         log_success "Vicinae installed successfully from official repository"
-        log_info "You can launch Vicinae from the applications menu or by running 'vicinae' in terminal"
+
+        # Configure global shortcut for Vicinae (Ctrl+Space)
+        log_info "Setting up global shortcut for Vicinae (Ctrl+Space)..."
+
+        # Check if we're in a desktop environment that supports gsettings
+        if command_exists gsettings && [[ -n "$DISPLAY" ]]; then
+            # Get current custom shortcuts
+            local shortcuts_list=$(gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings)
+            local new_shortcut_path="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/vicinae/"
+
+            # Add our shortcut path to the list if not already there
+            if [[ "$shortcuts_list" != *"$new_shortcut_path"* ]]; then
+                if [[ "$shortcuts_list" == "@as []" ]]; then
+                    # First custom shortcut
+                    gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "['$new_shortcut_path']"
+                else
+                    # Add to existing shortcuts
+                    local updated_list=${shortcuts_list%]}
+                    updated_list="${updated_list}, '$new_shortcut_path']"
+                    gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "$updated_list"
+                fi
+            fi
+
+            # Configure the shortcut
+            gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$new_shortcut_path name 'Vicinae'
+            gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$new_shortcut_path command 'vicinae'
+            gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$new_shortcut_path binding '<Control>space'
+
+            log_success "Global shortcut Ctrl+Space configured for Vicinae"
+        else
+            log_warning "Desktop environment not detected - you'll need to configure shortcut manually"
+        fi
+
+        log_info "You can launch Vicinae from the applications menu, by running 'vicinae' in terminal, or with Ctrl+Space"
     else
         log_success "Vicinae already installed"
+    fi
+}
+
+# Configure keyboard shortcuts and language switching
+configure_keyboard() {
+    log_info "Configuring keyboard shortcuts..."
+
+    # Check if we're in a desktop environment that supports gsettings
+    if command_exists gsettings && [[ -n "$DISPLAY" ]]; then
+        # Configure Caps Lock as language switch
+        log_info "Configuring Caps Lock as language switch..."
+        gsettings set org.gnome.desktop.input-sources xkb-options "['grp:caps_toggle']"
+        log_success "Caps Lock configured as language switch"
+    else
+        log_warning "Desktop environment not detected - you'll need to configure keyboard manually"
+        log_info "To set Caps Lock as language switch manually, run: gsettings set org.gnome.desktop.input-sources xkb-options \"['grp:caps_toggle']\""
     fi
 }
 
@@ -636,6 +687,7 @@ main() {
     # setup_firewall
     install_warp
     install_vicinae
+    configure_keyboard
 
     echo "=========================================="
     log_success "Bootstrap completed successfully!"
