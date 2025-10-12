@@ -1,0 +1,175 @@
+format = """
+$os\
+$username\
+[](fg:#00BCD4)\
+$directory\
+$git_branch\
+$git_commit\
+$git_state\
+$git_metrics\
+$git_status\
+$c\
+$golang\
+$java\
+$nodejs\
+$deno\
+$rust\
+$dart\
+$character
+"""
+
+right_format = """
+$status\
+$package\
+$kubernetes\
+$cmd_duration\
+$docker_context\
+$aws\
+$time\
+"""
+
+# Disable the blank line at the start of the prompt
+# add_newline = false
+
+# You can also replace your username with a neat symbol like   or disable this
+# and use the os module below
+[username]
+show_always = true
+style_user = "fg:#64DD17"
+style_root = "fg:#AD1457"
+format = '[ $user ]($style)'
+disabled = false
+
+# An alternative to the username module which displays a symbol that
+# represents the current operating system
+[os]
+style = "fg:#76FF03"
+disabled = false     # Disabled by default
+
+[directory]
+style = "fg:#00BCD4"
+format = "[ $path]($style) "
+truncation_length = 4
+truncation_symbol = "…/"
+read_only = ""
+truncate_to_repo = false
+# home_symbol = ""
+
+# Here is how you can shorten some long paths by text replacement
+# similar to mapped_locations in Oh My Posh:
+[directory.substitutions]
+"Documents" = " "
+"Downloads" = " "
+"Music" = " "
+"Pictures" = " "
+"repo" = "  repo"
+"projects" = "  projects"
+# Keep in mind that the order matters. For example:
+# "Important Documents" = "  "
+# will not be replaced, because "Documents" was already substituted before.
+# So either put "Important Documents" before "Documents" or use the substituted version:
+# "Important  " = "  "
+
+[docker_context]
+symbol = ""
+style = "fg:#06969A"
+format = '[ $symbol $context ]($style) $path '
+
+[git_branch]
+symbol = ""
+style = "fg:#D8593E"
+format = '[$symbol $branch ]($style)'
+
+[git_status]
+style = "fg:#EEFF41"
+format = '[$all_status$ahead_behind ]($style)'
+conflicted = ' $count'
+ahead = '⇡$count'
+behind = '⇣$count'
+untracked = ' $count'
+stashed = ' $count '
+modified = ' $count'
+staged = '[+$count](green)'
+renamed = ' $count'
+deleted = '﯊ $count'
+diverged = '⇕⇡${ahead_count}⇣${behind_count}'
+# up_to_date = '✓'
+
+[git_metrics]
+added_style = 'bold #43A047'
+format = '[+$added]($added_style)/[-$deleted]($deleted_style) '
+disabled = true
+
+[golang]
+symbol = " "
+style = "fg:#86BBD8"
+format = '[$symbol ($version) ]($style)'
+
+[java]
+symbol = " "
+style = "fg:#86BBD8"
+format = '[ $symbol ($version) ]($style)'
+
+[nodejs]
+symbol = ""
+style = "fg:#64DD17"
+format = '[$symbol ($version) ]($style)'
+
+[deno]
+symbol = "🦕"
+style = "fg:#00BCD4"
+format = '[ $symbol ($version) ]($style)'
+
+[rust]
+symbol = ""
+style = "fg:#86BBD8"
+format = '[$symbol ($version) ]($style)'
+
+[dart]
+symbol = ""
+style = "fg:#337EBC"
+format = '[ $symbol ($version) ]($style)'
+
+[time]
+disabled = false
+time_format = "%R"            # Hour:Minute Format
+style = "fg:#2196F3"
+format = '[  $time]($style)'
+
+[c]
+symbol = " "
+style = "fg:#86BBD8"
+format = '[ $symbol ($version) ]($style)'
+
+[cmd_duration]
+min_time = 100
+style = "fg:#01579B"
+format = '羽 [$duration](bold yellow)'
+
+[os.symbols]
+Macos = "גּ"
+
+[status]
+style = 'fg:blue'
+symbol = '🔴 '
+success_symbol = '🟢 SUCCESS'
+format = '[\[$symbol$common_meaning$signal_name$maybe_int\]]($style) '
+map_symbol = true
+disabled = true
+
+[package]
+symbol = " "
+format = '[$symbol $version](208 bold) '
+
+[character]
+success_symbol = "[➤](bold #76FF03)"
+error_symbol = "[✘](bold #AD1457)"
+
+[kubernetes]
+symbol = "☸ "
+format = '[$symbol$context \($namespace\)]($style)'
+style = "cyan bold"
+disabled = false
+[kubernetes.context_aliases]
+"gke_aytm-staging_us-central1-b_c1-staging" = "staging"
+"gke_aytm-production_us-central1_prod-c1" = "prod!"
