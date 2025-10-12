@@ -115,52 +115,38 @@ install_flatpak() {
 install_zsh() {
     log_info "Configuring Zsh..."
 
-    # Zsh should already be installed from development packages
-    if command_exists zsh; then
-        log_success "Zsh installed"
+    # Verify Zsh is installed
+    if ! command_exists zsh; then
+        log_error "Zsh is not installed"
+        return 1
+    fi
+    log_success "Zsh is available"
 
-        # Set Zsh as default shell if not already
-        if [[ "$SHELL" != *"zsh" ]]; then
-            log_info "Setting Zsh as default shell..."
-            local zsh_path=$(which zsh)
+    # Check if Zsh is already the default shell
+    if [[ "$SHELL" == *"zsh" ]]; then
+        log_success "Zsh is already the default shell"
+        return 0
+    fi
 
-            # Add zsh to /etc/shells if not already there
-            if ! grep -q "$zsh_path" /etc/shells 2>/dev/null; then
-                log_info "Adding zsh to /etc/shells..."
-                echo "$zsh_path" | sudo tee -a /etc/shells
-            fi
+    # Get the path to zsh
+    local zsh_path
+    zsh_path=$(command -v zsh)
+    log_info "Found zsh at: $zsh_path"
 
-            # Change shell - run both usermod and chsh for maximum compatibility
-            local usermod_success=false
-            local chsh_success=false
+    # Method 1: Use usermod (recommended for system-wide change)
+    log_info "Setting zsh as default shell using usermod..."
+    if sudo usermod -s "$zsh_path" "$USER"; then
+        log_success "Successfully set zsh as default shell"
+        log_warning "Please log out and log back in to use zsh as your default shell"
 
-            if sudo usermod -s "$zsh_path" "$USER"; then
-                log_success "Zsh set as default shell via usermod"
-                usermod_success=true
-            else
-                log_warning "usermod failed to set zsh as default shell"
-            fi
-
-            if chsh -s "$zsh_path"; then
-                log_success "Zsh set as default shell via chsh"
-                chsh_success=true
-            else
-                log_warning "chsh failed to set zsh as default shell"
-            fi
-
-            if [[ "$usermod_success" == true || "$chsh_success" == true ]]; then
-                log_success "Zsh successfully configured as default shell"
-                log_warning "Please log out and log back in for shell change to take effect"
-            else
-                log_error "Both usermod and chsh failed to set Zsh as default shell"
-                log_error "Bootstrap process stopped - Zsh must be set as default shell"
-                exit 1
-            fi
-        else
-            log_success "Zsh already set as default shell"
-        fi
+        # Switch to zsh for the remainder of the script
+        log_info "Switching to zsh for current session..."
+        export SHELL="$zsh_path"
+        return 0
     else
-        log_error "Zsh installation failed"
+        log_error "Failed to set zsh as default shell"
+        log_error "You may need to set it manually with: sudo usermod -s $zsh_path $USER"
+        exit 1
     fi
 }
 
