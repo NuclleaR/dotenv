@@ -340,7 +340,7 @@ install_nodejs() {
     # Check if mise is available (either in PATH or in ~/.local/bin)
     if command_exists mise || [[ -f "$HOME/.local/bin/mise" ]]; then
         # Ensure mise is in PATH and activated
-        if [[ -f "$HOME/.local/bin/mise" && ! command_exists mise ]]; then
+        if [[ -f "$HOME/.local/bin/mise" ]] && ! command_exists mise; then
             export PATH="$HOME/.local/bin:$PATH"
         fi
 
@@ -368,7 +368,7 @@ install_bun() {
     # Check if mise is available (either in PATH or in ~/.local/bin)
     if command_exists mise || [[ -f "$HOME/.local/bin/mise" ]]; then
         # Ensure mise is in PATH and activated
-        if [[ -f "$HOME/.local/bin/mise" && ! command_exists mise ]]; then
+        if [[ -f "$HOME/.local/bin/mise" ]] && ! command_exists mise; then
             export PATH="$HOME/.local/bin:$PATH"
         fi
 
@@ -628,7 +628,7 @@ main() {
     echo "Docker: $(docker --version 2>/dev/null || echo 'Not available')"
     echo "VS Code: $(code --version 2>/dev/null | head -n1 || echo 'Not available')"
     echo "Warp: $(warp-terminal --version 2>/dev/null || echo 'Not available')"
-    echo "Vicinae: $(vicinae --version 2>/dev/null || test -f /usr/local/bin/vicinae && echo 'Installed as AppImage' || echo 'Not available')"
+    echo "Vicinae: $(vicinae --version 2>/dev/null || (test -f /usr/local/bin/vicinae && echo 'Installed as AppImage') || echo 'Not available')"
 }
 
 # Run the main function
