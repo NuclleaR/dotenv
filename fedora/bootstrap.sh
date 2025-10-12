@@ -313,20 +313,11 @@ install_dust() {
     log_info "Installing dust (better du)..."
 
     if ! command_exists dust; then
-        # Install from GitHub releases since dust might not be in Fedora repos
-        local latest_url=$(curl -s https://api.github.com/repos/bootandy/dust/releases/latest | grep "browser_download_url.*x86_64-unknown-linux-gnu.tar.gz" | cut -d '"' -f 4)
-        if [[ -n "$latest_url" ]]; then
-            cd /tmp
-            wget "$latest_url" -O dust.tar.gz
-            tar -xzf dust.tar.gz
-            # Find the dust binary in the extracted directory
-            find . -name "dust" -type f -executable | head -1 | xargs -I {} sudo mv {} /usr/local/bin/
-            rm -rf dust* v*
-            log_success "dust installed"
+        # Install from Fedora official repositories (package name is du-dust)
+        if sudo dnf install -y du-dust; then
+            log_success "dust installed from Fedora repositories"
         else
-            log_warning "Could not download dust, trying dnf..."
-            # Try installing from repos as fallback
-            sudo dnf install -y dust 2>/dev/null || log_warning "dust not available in repositories, skipping..."
+            log_warning "Could not install dust from repositories"
         fi
     else
         log_success "dust already installed"
