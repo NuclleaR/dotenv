@@ -366,13 +366,26 @@ install_pnpm() {
     log_info "Installing pnpm..."
 
     if ! command_exists pnpm; then
-        if command_exists npm; then
-            npm install -g pnpm
-            log_success "pnpm installed via npm"
+        # Install pnpm standalone and configure for zsh
+        log_info "Installing pnpm via standalone installer..."
+        curl -fsSL https://get.pnpm.io/install.sh | sh -
+
+        # Add pnpm to .zshrc if not already present
+        if [[ -f "$HOME/.local/share/pnpm/pnpm" ]] && ! grep -q "PNPM_HOME" ~/.zshrc 2>/dev/null; then
+            log_info "Adding pnpm to ~/.zshrc..."
+            echo '' >> ~/.zshrc
+            echo '# pnpm' >> ~/.zshrc
+            echo 'export PNPM_HOME="$HOME/.local/share/pnpm"' >> ~/.zshrc
+            echo 'case ":$PATH:" in' >> ~/.zshrc
+            echo '  *":$PNPM_HOME:"*) ;;' >> ~/.zshrc
+            echo '  *) export PATH="$PNPM_HOME:$PATH" ;;' >> ~/.zshrc
+            echo 'esac' >> ~/.zshrc
+            echo '# pnpm end' >> ~/.zshrc
         else
-            curl -fsSL https://get.pnpm.io/install.sh | sh -
-            log_success "pnpm installed via standalone installer"
+            log_success "pnpm configuration already exists in ~/.zshrc"
         fi
+
+        log_success "pnpm installed via standalone installer"
     else
         log_success "pnpm already installed"
     fi
@@ -529,17 +542,17 @@ install_warp() {
     log_info "Installing Warp terminal..."
 
     if ! command_exists warp-terminal; then
-        # Add Warp repository and install
-        log_info "Adding Warp repository..."
+        # Download and install Warp RPM package directly (as per official docs)
+        log_info "Downloading Warp RPM package..."
+        cd /tmp
+        wget "https://app.warp.dev/get_warp?package=rpm" -O warp.rpm
 
-        # Import Warp GPG key
-        sudo rpm --import https://releases.warp.dev/linux/public.key
+        # Install Warp from downloaded RPM
+        log_info "Installing Warp from RPM package..."
+        sudo dnf install -y ./warp.rpm
 
-        # Add Warp repository
-        sudo sh -c 'echo -e "[warp]\nname=Warp\nbaseurl=https://releases.warp.dev/linux/rpm/stable\nenabled=1\ngpgcheck=1\ngpgkey=https://releases.warp.dev/linux/public.key" > /etc/yum.repos.d/warp.repo'
-
-        # Install Warp
-        sudo dnf install -y warp-terminal
+        # Cleanup
+        rm warp.rpm
 
         log_success "Warp terminal installed"
     else
