@@ -1,0 +1,29 @@
+mise: installed successfully to /Users/serhii/.local/bin/mise
+mise: run the following to activate mise in your shell:
+echo "eval \"\$(/Users/serhii/.local/bin/mise activate zsh)\"" >> "/Users/serhii/.zshrc"
+
+mise: run `mise doctor` to verify this is setup correctly
+mise: installed successfully to /Users/serhii/.local/bin/mise
+mise: adding activation to /Users/serhii/.zshrc
+mise: activation added to /Users/serhii/.zshrc
+mise: restart your shell or run 'source /Users/serhii/.zshrc' to activate mise
+mise: run 'mise doctor' to verify setup
+
+mise: setup complete! 🎉
+mise: restart your shell or run 'source /Users/serhii/.zshrc' to start using mise
+
+
+PNPM
+ WARN  using --force I sure hope you know what you are doing
+Copying pnpm CLI from /private/var/folders/0k/4yp_hsts7qvc5h025v8wwsbc0000gn/T/tmp.Olglzmvong/pnpm to /Users/serhii/Library/pnpm/.tools/pnpm-exe/10.18.2/pnpm
+Appended new lines to /Users/serhii/.zshrc
+
+Next configuration changes were made:
+export PNPM_HOME="/Users/serhii/Library/pnpm"
+case ":$PATH:" in
+  *":$PNPM_HOME:"*) ;;
+  *) export PATH="$PNPM_HOME:$PATH" ;;
+esac
+
+To start using pnpm, run:
+source /Users/serhii/.zshrc
