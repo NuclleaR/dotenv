@@ -5,8 +5,8 @@
 
 # Basic ls replacements
 alias ls='eza --color=always --group-directories-first'
-alias ll='eza -lah --color=always --group-directories-first --icons'
-alias l='eza -F --color=always --group-directories-first --icons'
+alias ll='eza -lah --color=always --group-directories-first'
+alias l='eza -F --color=always --group-directories-first'
 
 # Advanced eza aliases
 alias lt='eza --tree --level=2 --color=always --group-directories-first --icons'
@@ -50,3 +50,52 @@ alias .....='cd ../../../..'
 
 alias myip="ifconfig | grep \"inet \" | grep -Fv 127.0.0.1 | awk '{print \$2}'"
 alias zz="source ~/.zshrc"
+
+# Git aliases
+# Quick status and staging
+alias g='git'
+alias gs='git status'
+alias ga='git add'
+alias gaa='git add .'
+alias gap='git add -p'  # Interactive staging
+
+# Committing
+alias gc='git commit'
+alias gcm='git commit -m'
+alias gca='git commit -a'
+alias gcam='git commit -am'
+alias gcfix='git commit --fixup'
+alias gcsq='git commit --squash'
+
+# Branching and switching
+alias gb='git branch'
+alias gba='git branch -a'
+alias gbd='git branch -d'
+alias gbD='git branch -D'
+alias gco='git checkout'
+alias gcb='git checkout -b'
+alias gsw='git switch'
+alias gswc='git switch -c'
+
+# Remote operations
+alias gf='git fetch'
+alias gfa='git fetch --all'
+alias gp='git push'
+alias gpo='git push origin'
+alias gpf='git push --force-with-lease'
+alias gl='git pull'
+alias glo='git pull origin'
+
+# Reset and restore
+alias grs='git reset'
+alias grsh='git reset --hard'
+alias grss='git reset --soft'
+alias grt='git restore'
+alias grts='git restore --staged'
+
+# Useful shortcuts
+alias gwip='git add -A && git commit -m "WIP: work in progress"'
+alias gunwip='git log -n 1 --format="%s" | grep -q "^WIP:" && git reset HEAD~1'
+alias gclean='git clean -fd'
+alias gtag='git tag'
+alias gshow='git show'
