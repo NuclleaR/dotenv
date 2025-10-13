@@ -181,6 +181,25 @@ install_eza() {
     fi
 }
 
+# Install zoxide (better cd)
+install_zoxide() {
+    log_info "Checking for zoxide..."
+
+    if ! command_exists zoxide; then
+        log_info "Installing zoxide..."
+        brew install zoxide
+
+        # Add zoxide init to shell config if not already present
+        if ! grep -q "zoxide init" ~/.zshrc 2>/dev/null; then
+            echo 'eval "$(zoxide init zsh)"' >> ~/.zshrc
+        fi
+
+        log_success "zoxide installed and configured"
+    else
+        log_success "zoxide already installed"
+    fi
+}
+
 # Install Node.js using mise
 install_nodejs() {
     log_info "Installing Node.js using mise..."
@@ -254,6 +273,32 @@ install_jdk() {
     fi
 }
 
+# Install rip2 (better rm)
+install_rip2() {
+    log_info "Checking for rip2..."
+
+    if ! command_exists rip; then
+        log_info "Installing rip2..."
+        brew install rip2
+        log_success "rip2 installed"
+    else
+        log_success "rip2 already installed"
+    fi
+}
+
+# Install dust (better du)
+install_dust() {
+    log_info "Checking for dust..."
+
+    if ! command_exists dust; then
+        log_info "Installing dust..."
+        brew install dust
+        log_success "dust installed"
+    else
+        log_success "dust already installed"
+    fi
+}
+
 # Create .zshrc if it doesn't exist
 create_zshrc() {
     if [[ ! -f ~/.zshrc ]]; then
@@ -262,20 +307,137 @@ create_zshrc() {
     fi
 }
 
-# Main installation function
-main() {
+# Configure dotenv sourcing in .zshrc
+configure_dotenv_sourcing() {
+    log_info "Configuring dotenv sourcing in ~/.zshrc..."
+
+    local dotenv_dir="$(dirname "$(dirname "$(pwd)")")"
+
+    # Check if dotenv configuration already exists
+    if ! grep -q "DOTENV_DIR" ~/.zshrc 2>/dev/null; then
+        log_info "Adding dotenv configuration to ~/.zshrc..."
+
+        # Add dotenv configuration
+        cat >> ~/.zshrc << 'EOF'
+
+# Set dotenv path
+DOTENV_DIR="/Users/serhii/dev/dotenv"
+
+# Load eza aliases
+if [[ -f "$DOTENV_DIR/macos/zsh.sh" ]]; then
+    source "$DOTENV_DIR/macos/zsh.sh"
+fi
+EOF
+
+        log_success "Dotenv sourcing configured in ~/.zshrc"
+    else
+        log_success "Dotenv sourcing already configured in ~/.zshrc"
+    fi
+}
+
+# Install Git configuration
+configure_git() {
+    log_info "Configuring Git..."
+
+    # Set up some useful Git aliases and configurations
+    git config --global init.defaultBranch main
+    git config --global pull.rebase false
+    git config --global core.autocrlf input
+
+    # Useful aliases
+    git config --global alias.co checkout
+    git config --global alias.br branch
+    git config --global alias.ci commit
+    git config --global alias.st status
+    git config --global alias.unstage 'reset HEAD --'
+    git config --global alias.last 'log -1 HEAD'
+    git config --global alias.rf '!f() { git checkout HEAD -- "$@"; }; f'
+    git config --global alias.sync '!f() { echo "Fetching latest changes..." && git fetch --all && echo "Attempting to merge with main/master..." && (git merge --no-ff origin/main || git merge --no-ff origin/master || echo "Merge conflicts detected. Please resolve manually"); }; f'
+    git config --global alias.lg "log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit"
+
+    log_success "Git configured with useful aliases"
+}
+
+# Show help message
+show_help() {
+    echo "macOS Bootstrap Script"
+    echo ""
+    echo "Usage: $0 [OPTIONS]"
+    echo ""
+    echo "Options:"
+    echo "  --all, -a                      Run all installation functions (default)"
+    echo "  -i, --install FUNCTION         Run specific function(s)"
+    echo "  -v, --versions                 Show installed versions only"
+    echo "  --help, -h                     Show this help message"
+    echo ""
+    echo "Available Functions:"
+    echo "  create_zshrc                   Create .zshrc file if it doesn't exist"
+    echo "  configure_dotenv_sourcing      Configure dotenv sourcing in ~/.zshrc"
+    echo "  configure_git                  Configure Git with useful aliases and settings"
+    echo "  xcode_tools                    Install Xcode Command Line Tools"
+    echo "  homebrew                       Install Homebrew package manager"
+    echo "  git                            Install Git version control"
+    echo "  zsh                            Install Zsh shell"
+    echo "  starship                       Install Starship prompt"
+    echo "  mise                           Install mise CLI version manager"
+    echo "  bat                            Install bat (better cat)"
+    echo "  eza                            Install eza (better ls)"
+    echo "  zoxide                         Install zoxide (better cd)"
+    echo "  rip2                           Install rip2 (better rm)"
+    echo "  dust                           Install dust (better du)"
+    echo "  nodejs                         Install Node.js using mise"
+    echo "  bun                            Install Bun using mise"
+    echo "  pnpm                           Install pnpm package manager"
+    echo "  jdk                            Install Eclipse Temurin JDK 21"
+    echo ""
+    echo "Examples:"
+    echo "  $0                                    # Run all functions"
+    echo "  $0 --all                              # Run all functions"
+    echo "  $0 -a                                 # Run all functions"
+    echo "  $0 -v                                 # Show installed versions only"
+    echo "  $0 -i configure_dotenv_sourcing       # Only configure dotenv sourcing"
+    echo "  $0 -i git                             # Install Git only"
+    echo "  $0 -i git -i zsh                      # Install Git and Zsh"
+    echo "  $0 --install configure_dotenv_sourcing git  # Multiple functions"
+}
+
+# Show installed versions
+show_versions() {
+    log_info "Installed versions:"
+    echo "Git: $(git --version 2>/dev/null || echo 'Not available')"
+    echo "Zsh: $(zsh --version 2>/dev/null || echo 'Not available')"
+    echo "Starship: $(starship --version 2>/dev/null | head -n1 || echo 'Not available')"
+    echo "mise: $(mise --version 2>/dev/null || echo 'Not available')"
+    echo "bat: $(bat --version 2>/dev/null || echo 'Not available')"
+    echo "eza: $(eza --version 2>/dev/null | head -n2 || echo 'Not available')"
+    echo "zoxide: $(zoxide --version 2>/dev/null || echo 'Not available')"
+    echo "rip2: $(rip --version 2>/dev/null || echo 'Not available')"
+    echo "dust: $(dust --version 2>/dev/null || echo 'Not available')"
+    echo "Node.js: $(node --version 2>/dev/null || echo 'Not available')"
+    echo "Bun: $(bun --version 2>/dev/null || echo 'Not available')"
+    echo "pnpm: $(pnpm --version 2>/dev/null || echo 'Not available')"
+    echo "Java: $(java --version 2>/dev/null | head -n1 || echo 'Not available')"
+}
+
+# Run all installation functions
+run_all() {
     log_info "Starting macOS Bootstrap Process..."
     echo "=================================="
 
     create_zshrc
+    configure_dotenv_sourcing
     install_xcode_tools
     install_homebrew
     install_git
+    configure_git
     install_zsh
     install_starship
     install_mise
     install_bat
     install_eza
+    install_zoxide
+    install_rip2
+    install_dust
     install_nodejs
     install_bun
     install_pnpm
@@ -285,19 +447,132 @@ main() {
     log_success "Bootstrap completed successfully!"
     log_info "Please restart your terminal or run 'source ~/.zshrc' to apply all changes"
 
-    # Show installed versions
     echo ""
-    log_info "Installed versions:"
-    echo "Git: $(git --version 2>/dev/null || echo 'Not available')"
-    echo "Zsh: $(zsh --version 2>/dev/null || echo 'Not available')"
-    echo "Starship: $(starship --version 2>/dev/null || echo 'Not available')"
-    echo "mise: $(mise --version 2>/dev/null || echo 'Not available')"
-    echo "bat: $(bat --version 2>/dev/null || echo 'Not available')"
-    echo "eza: $(eza --version 2>/dev/null | head -n1 || echo 'Not available')"
-    echo "Node.js: $(node --version 2>/dev/null || echo 'Not available')"
-    echo "Bun: $(bun --version 2>/dev/null || echo 'Not available')"
-    echo "pnpm: $(pnpm --version 2>/dev/null || echo 'Not available')"
-    echo "Java: $(java --version 2>/dev/null | head -n1 || echo 'Not available')"
+    show_versions
+}
+
+# Main function with argument parsing
+main() {
+    # If no arguments provided, run all functions
+    if [[ $# -eq 0 ]]; then
+        run_all
+        return
+    fi
+
+    local functions_to_run=()
+    local run_all_flag=false
+
+    # Parse command line arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --help|-h)
+                show_help
+                return 0
+                ;;
+            --versions|-v)
+                show_versions
+                return 0
+                ;;
+            --all|-a)
+                run_all_flag=true
+                shift
+                ;;
+            -i|--install)
+                shift
+                # Collect all function names until next flag or end of arguments
+                while [[ $# -gt 0 && ! "$1" =~ ^- ]]; do
+                    # Validate function name and map short names to actual function names
+                    case $1 in
+                        create_zshrc|configure_dotenv_sourcing|configure_git)
+                            functions_to_run+=("$1")
+                            ;;
+                        xcode_tools)
+                            functions_to_run+=(install_xcode_tools)
+                            ;;
+                        homebrew)
+                            functions_to_run+=(install_homebrew)
+                            ;;
+                        git)
+                            functions_to_run+=(install_git)
+                            ;;
+                        zsh)
+                            functions_to_run+=(install_zsh)
+                            ;;
+                        starship)
+                            functions_to_run+=(install_starship)
+                            ;;
+                        mise)
+                            functions_to_run+=(install_mise)
+                            ;;
+                        bat)
+                            functions_to_run+=(install_bat)
+                            ;;
+                        eza)
+                            functions_to_run+=(install_eza)
+                            ;;
+                        zoxide)
+                            functions_to_run+=(install_zoxide)
+                            ;;
+                        rip2)
+                            functions_to_run+=(install_rip2)
+                            ;;
+                        dust)
+                            functions_to_run+=(install_dust)
+                            ;;
+                        nodejs)
+                            functions_to_run+=(install_nodejs)
+                            ;;
+                        bun)
+                            functions_to_run+=(install_bun)
+                            ;;
+                        pnpm)
+                            functions_to_run+=(install_pnpm)
+                            ;;
+                        jdk)
+                            functions_to_run+=(install_jdk)
+                            ;;
+                        *)
+                            log_error "Unknown function: $1"
+                            log_info "Run '$0 --help' to see available functions"
+                            return 1
+                            ;;
+                    esac
+                    shift
+                done
+                ;;
+            *)
+                log_error "Unknown option: $1"
+                show_help
+                return 1
+                ;;
+        esac
+    done
+
+    # Run all functions if --all flag is set
+    if [[ "$run_all_flag" == true ]]; then
+        run_all
+        return
+    fi
+
+    # Run specific functions
+    if [[ ${#functions_to_run[@]} -gt 0 ]]; then
+        log_info "Running selected functions..."
+        echo "=================================="
+
+        for func in "${functions_to_run[@]}"; do
+            $func
+        done
+
+        echo "=================================="
+        log_success "Selected functions completed successfully!"
+
+        echo ""
+        show_versions
+    else
+        log_error "No valid functions specified"
+        show_help
+        return 1
+    fi
 }
 
 # Run the main function
