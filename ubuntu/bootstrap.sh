@@ -566,9 +566,9 @@ run_all() {
     echo "=================================="
 
     check_ubuntu
+    update_system
     create_zshrc
     configure_dotenv_sourcing
-    update_system
     install_essential_packages
     install_git
     configure_git
