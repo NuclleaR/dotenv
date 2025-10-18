@@ -6,12 +6,19 @@
 
 set -euo pipefail
 
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOTENV_ROOT="$(dirname "$SCRIPT_DIR")"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
+
+# Source common Git configuration
+source "$DOTENV_ROOT/common/git_conf.sh"
 
 # Logging functions
 log_info() {
@@ -443,6 +450,29 @@ install_jdk() {
     log_success "JDK 21 configuration complete"
 }
 
+# Install Warp Terminal
+install_warp() {
+    log_info "Installing Warp Terminal..."
+
+    if command_exists warp-terminal; then
+        log_success "Warp Terminal already installed"
+        return
+    fi
+
+    log_info "Downloading Warp Terminal..."
+    cd /tmp
+    wget https://app.warp.dev/get_warp?package=deb -O warp-terminal.deb
+
+    log_info "Installing Warp Terminal..."
+    sudo apt install -y ./warp-terminal.deb
+
+    # Clean up
+    rm warp-terminal.deb
+
+    log_success "Warp Terminal installed successfully"
+    log_info "You can launch it from the applications menu or run: warp-terminal"
+}
+
 # Create .zshrc if it doesn't exist
 create_zshrc() {
     if [[ ! -f ~/.zshrc ]]; then
@@ -477,32 +507,6 @@ EOF
     fi
 }
 
-# Configure Git
-configure_git() {
-    log_info "Configuring Git..."
-
-    # Set up some useful Git aliases and configurations
-    git config --global init.defaultBranch main
-    git config --global pull.rebase false
-    git config --global core.autocrlf input
-    git config --global core.editor nano
-
-    # Useful aliases
-    git config --global alias.co checkout
-    git config --global alias.br branch
-    git config --global alias.ci 'commit -a'
-    git config --global alias.cia 'commit -a --amend'
-    git config --global alias.st status
-    git config --global alias.unstage 'reset HEAD --'
-    git config --global alias.last 'log -1 HEAD'
-    git config --global alias.rf '!f() { git checkout HEAD -- "$@"; }; f'
-    git config --global alias.sync '!f() { echo "Fetching latest changes..." && git fetch --all && echo "Attempting to merge with main/master..." && (git merge --no-ff origin/main || git merge --no-ff origin/master || echo "Merge conflicts detected. Please resolve manually"); }; f'
-    git config --global alias.rm '!f() { git fetch --all && (git reset --hard origin/main || git reset --hard origin/master); }; f'
-    git config --global alias.lg "log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit"
-
-    log_success "Git configured with useful aliases"
-}
-
 # Show help message
 show_help() {
     echo "Ubuntu/Pop!_OS Bootstrap Script"
@@ -534,6 +538,7 @@ show_help() {
     echo "  bun                            Install Bun using mise"
     echo "  pnpm                           Install pnpm package manager"
     echo "  jdk                            Install Eclipse Temurin JDK 21"
+    echo "  warp                           Install Warp Terminal"
     echo ""
     echo "Examples:"
     echo "  $0                                    # Run all functions"
@@ -564,6 +569,7 @@ show_versions() {
     echo "Bun: $(bun --version 2>/dev/null || echo 'Not available')"
     echo "pnpm: $(pnpm --version 2>/dev/null || echo 'Not available')"
     echo "Java: $(java --version 2>/dev/null | head -n1 || echo 'Not available')"
+    echo "Warp: $(warp-terminal --version 2>/dev/null || echo 'Not available')"
 }
 
 # Run all installation functions
@@ -591,6 +597,7 @@ run_all() {
     install_bun
     install_pnpm
     install_jdk
+    install_warp
 
     echo "=================================="
     log_success "Bootstrap completed successfully!"
@@ -679,6 +686,9 @@ main() {
                             ;;
                         jdk)
                             functions_to_run+=(install_jdk)
+                            ;;
+                        warp)
+                            functions_to_run+=(install_warp)
                             ;;
                         *)
                             log_error "Unknown function: $1"

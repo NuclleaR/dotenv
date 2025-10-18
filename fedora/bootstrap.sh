@@ -5,12 +5,19 @@
 
 set -euo pipefail
 
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOTENV_ROOT="$(dirname "$SCRIPT_DIR")"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
+
+# Source common Git configuration
+source "$DOTENV_ROOT/common/git_conf.sh"
 
 # Logging functions
 log_info() {
@@ -493,28 +500,6 @@ install_vscode() {
     else
         log_success "Visual Studio Code already installed"
     fi
-}
-
-# Install Git configuration
-configure_git() {
-    log_info "Configuring Git..."
-
-    # Set up some useful Git aliases and configurations
-    git config --global init.defaultBranch main
-    git config --global pull.rebase false
-    git config --global core.autocrlf input
-
-    # Useful aliases
-    git config --global alias.co checkout
-    git config --global alias.br branch
-    git config --global alias.ci commit
-    git config --global alias.st status
-    git config --global alias.unstage 'reset HEAD --'
-    git config --global alias.last 'log -1 HEAD'
-    git config --global alias.visual '!gitk'
-    git config --global alias.lg "log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit"
-
-    log_success "Git configured with useful aliases"
 }
 
 # Create .zshrc if it doesn't exist
