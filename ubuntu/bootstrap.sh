@@ -473,6 +473,150 @@ install_warp() {
     log_info "You can launch it from the applications menu or run: warp-terminal"
 }
 
+# Install Vicinae (Raycast analog for Linux)
+install_vicinae() {
+    log_info "Installing Vicinae (Raycast analog for Linux)..."
+
+    if command_exists vicinae; then
+        log_success "Vicinae already installed"
+        return
+    fi
+
+    # Install runtime dependencies according to https://docs.vicinae.com/release-install
+    log_info "Installing Vicinae runtime dependencies..."
+    local deps=(
+        "libssl-dev"
+        "libwayland-dev"
+        "qt6-base-dev"
+        "qt6-wayland-dev"
+        "qt6-svg-dev"
+        "qt6-svg-plugins"
+        "qt6-svg-private-dev"
+        "libqt6svg6"
+        "qtkeychain-qt6-dev"
+        "protobuf-compiler"
+        "cmark-gfm"
+        "layer-shell-qt"
+        "libqalculate-dev"
+        "libminizip-dev"
+        "zlib1g-dev"
+        "librapidfuzz-cpp-dev"
+        "libprotobuf-dev"
+        "libcmark-gfm-dev"
+    )
+
+    sudo apt install -y "${deps[@]}"
+    log_success "Runtime dependencies installed"
+
+    # Download latest release
+    log_info "Downloading latest Vicinae release..."
+    local latest_version=$(curl -s https://api.github.com/repos/vicinaehq/vicinae/releases/latest | grep '"tag_name"' | cut -d '"' -f 4)
+
+    if [[ -z "$latest_version" ]]; then
+        log_error "Failed to get latest Vicinae version"
+        return 1
+    fi
+
+    log_info "Latest version: $latest_version"
+
+    cd /tmp
+    local tarball="vicinae-linux-x86_64-${latest_version}.tar.gz"
+    local download_url="https://github.com/vicinaehq/vicinae/releases/download/${latest_version}/${tarball}"
+
+    log_info "Downloading from: $download_url"
+    wget "$download_url" -O "$tarball"
+
+    # Extract to vicinae directory
+    log_info "Extracting Vicinae to vicinae directory..."
+    mkdir -p vicinae
+    tar xvf "$tarball" -C vicinae
+
+    # Install to system directories
+    log_info "Installing to system directories..."
+    sudo cp vicinae/bin/* /usr/local/bin/
+    sudo cp -r vicinae/share/* /usr/local/share/
+
+    # Clean up - remove tarball and extracted directory
+    log_info "Cleaning up temporary files..."
+    rm -rf "$tarball" vicinae
+
+    log_success "Vicinae installed successfully"
+
+    # Create systemd user service file for Vicinae
+    log_info "Creating systemd user service for Vicinae..."
+    mkdir -p ~/.config/systemd/user
+
+    cat > ~/.config/systemd/user/vicinae.service << 'EOF'
+[Unit]
+Description=Vicinae Server
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/vicinae server
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+EOF
+
+    # Reload systemd user daemon and enable service
+    systemctl --user daemon-reload
+
+    log_info "Enabling and starting Vicinae server service..."
+    if systemctl enable --now --user vicinae.service; then
+        log_success "Vicinae server service enabled and started"
+    else
+        log_warning "Could not start vicinae.service automatically"
+        log_info "You can start it manually with: systemctl enable --now --user vicinae.service"
+        log_info "Or run the server directly with: vicinae server"
+    fi
+
+    # # Configure global shortcut for Vicinae (Ctrl+Space)
+    # log_info "Setting up global shortcut for Vicinae (Ctrl+Space)..."
+
+    # # Check if we're in a desktop environment that supports gsettings
+    # if command_exists gsettings && [[ -n "$DISPLAY" ]]; then
+    #     # Get current custom shortcuts
+    #     local shortcuts_list=$(gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings)
+    #     local new_shortcut_path="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/vicinae/"
+
+    #     # Add our shortcut path to the list if not already there
+    #     if [[ "$shortcuts_list" != *"$new_shortcut_path"* ]]; then
+    #         if [[ "$shortcuts_list" == "@as []" ]]; then
+    #             # First custom shortcut
+    #             gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "['$new_shortcut_path']"
+    #         else
+    #             # Add to existing shortcuts
+    #             local updated_list=${shortcuts_list%]}
+    #             updated_list="${updated_list}, '$new_shortcut_path']"
+    #             gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "$updated_list"
+    #         fi
+    #     fi
+
+    #     # Configure the shortcut
+    #     gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$new_shortcut_path name 'Vicinae'
+    #     gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$new_shortcut_path command 'vicinae'
+    #     gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$new_shortcut_path binding '<Control>space'
+
+    #     log_success "Global shortcut Ctrl+Space configured for Vicinae"
+    # else
+    #     log_warning "Desktop environment not detected - you'll need to configure shortcut manually"
+    # fi
+
+    echo ""
+    log_success "Vicinae installation complete!"
+    log_info "To control the window, run: vicinae toggle"
+    # log_info "Or use the configured Ctrl+Space shortcut"
+    log_info "Server commands:"
+    log_info "  - Start server: systemctl start --user vicinae.service"
+    log_info "  - Stop server:  systemctl stop --user vicinae.service"
+    log_info "  - Or run directly: vicinae server"
+    log_info ""
+    log_info "If you encounter missing library errors, run: ldd /usr/local/bin/vicinae | grep 'not'"
+}
+
 # Create .zshrc if it doesn't exist
 create_zshrc() {
     if [[ ! -f ~/.zshrc ]]; then
@@ -539,6 +683,7 @@ show_help() {
     echo "  pnpm                           Install pnpm package manager"
     echo "  jdk                            Install Eclipse Temurin JDK 21"
     echo "  warp                           Install Warp Terminal"
+    echo "  vicinae                        Install Vicinae (Raycast for Linux)"
     echo ""
     echo "Examples:"
     echo "  $0                                    # Run all functions"
@@ -570,6 +715,7 @@ show_versions() {
     echo "pnpm: $(pnpm --version 2>/dev/null || echo 'Not available')"
     echo "Java: $(java --version 2>/dev/null | head -n1 || echo 'Not available')"
     echo "Warp: $(warp-terminal --version 2>/dev/null || echo 'Not available')"
+    echo "Vicinae: $(vicinae --version 2>/dev/null || echo 'Not available')"
 }
 
 # Run all installation functions
@@ -689,6 +835,9 @@ main() {
                             ;;
                         warp)
                             functions_to_run+=(install_warp)
+                            ;;
+                        vicinae)
+                            functions_to_run+=(install_vicinae)
                             ;;
                         *)
                             log_error "Unknown function: $1"
