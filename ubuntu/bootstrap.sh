@@ -460,8 +460,8 @@ install_warp() {
     fi
 
     log_info "Downloading Warp Terminal..."
-    cd /tmp
-    wget https://app.warp.dev/get_warp?package=deb -O warp-terminal.deb
+
+    wget https://app.warp.dev/download?package=deb -O warp-terminal.deb
 
     log_info "Installing Warp Terminal..."
     sudo apt install -y ./warp-terminal.deb
