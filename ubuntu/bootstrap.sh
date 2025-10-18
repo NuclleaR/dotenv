@@ -119,22 +119,22 @@ install_zsh() {
 
     # Get the path to zsh
     local zsh_path
-    zsh_path=$(command -v zsh)
+    zsh_path=$(which zsh)
     log_info "Found zsh at: $zsh_path"
 
-    # Set Zsh as default shell using usermod
-    log_info "Setting zsh as default shell using usermod..."
-    if sudo usermod -s "$zsh_path" "$USER"; then
+    # Set Zsh as default shell using chsh
+    log_info "Setting zsh as default shell using chsh..."
+    if chsh -s "$zsh_path"; then
         log_success "Successfully set zsh as default shell"
-        log_warning "Please log out and log back in to use zsh as your default shell"
-
-        # Switch to zsh for the remainder of the script
-        log_info "Switching to zsh for current session..."
-        export SHELL="$zsh_path"
-        return 0
+        echo ""
+        log_warning "=========================================="
+        log_warning "Log out and log back in again to use your new default shell."
+        log_warning "=========================================="
+        echo ""
+        exit 0
     else
         log_error "Failed to set zsh as default shell"
-        log_error "You may need to set it manually with: sudo usermod -s $zsh_path $USER"
+        log_error "You may need to set it manually with: chsh -s $zsh_path"
         exit 1
     fi
 }
@@ -466,8 +466,8 @@ configure_dotenv_sourcing() {
 DOTENV_DIR="$HOME/dev/dotenv"
 
 # Load zsh configuration
-if [[ -f "$DOTENV_DIR/ubuntu/zsh.sh" ]]; then
-    source "$DOTENV_DIR/ubuntu/zsh.sh"
+if [[ -f "$DOTENV_DIR/zsh.sh" ]]; then
+    source "$DOTENV_DIR/zsh.sh"
 fi
 EOF
 
