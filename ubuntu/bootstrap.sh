@@ -1,7 +1,8 @@
 #!/bin/bash
 
-# Ubuntu 25.10 Bootstrap Script
+# Ubuntu/Pop!_OS Bootstrap Script
 # This script installs essential development tools and packages
+# Supports Ubuntu 24.04+ and Pop!_OS 24.04+
 
 set -euo pipefail
 
@@ -34,7 +35,7 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
-# Check if running on Ubuntu
+# Check if running on Ubuntu or Pop!_OS
 check_ubuntu() {
     if [[ ! -f /etc/os-release ]]; then
         log_error "Cannot determine OS version"
@@ -42,12 +43,17 @@ check_ubuntu() {
     fi
 
     . /etc/os-release
-    if [[ "$ID" != "ubuntu" ]]; then
-        log_error "This script is designed for Ubuntu only"
+    if [[ "$ID" != "ubuntu" && "$ID" != "pop" ]]; then
+        log_error "This script is designed for Ubuntu or Pop!_OS only"
+        log_error "Detected: $ID"
         exit 1
     fi
 
-    log_success "Detected Ubuntu $VERSION"
+    if [[ "$ID" == "pop" ]]; then
+        log_success "Detected Pop!_OS $VERSION"
+    else
+        log_success "Detected Ubuntu $VERSION"
+    fi
 }
 
 # Update system packages
@@ -499,7 +505,7 @@ configure_git() {
 
 # Show help message
 show_help() {
-    echo "Ubuntu 25.10 Bootstrap Script"
+    echo "Ubuntu/Pop!_OS Bootstrap Script"
     echo ""
     echo "Usage: $0 [OPTIONS]"
     echo ""
@@ -562,7 +568,7 @@ show_versions() {
 
 # Run all installation functions
 run_all() {
-    log_info "Starting Ubuntu 25.10 Bootstrap Process..."
+    log_info "Starting Bootstrap Process..."
     echo "=================================="
 
     check_ubuntu
