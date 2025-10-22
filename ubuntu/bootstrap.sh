@@ -429,11 +429,18 @@ install_jdk() {
         log_success "Eclipse Temurin JDK 21 already installed"
     else
         log_info "Adding Adoptium APT repository..."
-        wget -O - https://packages.adoptium.net/artifactory/api/gpg/key/public | sudo tee /usr/share/keyrings/adoptium.asc
-        echo "deb [signed-by=/usr/share/keyrings/adoptium.asc] https://packages.adoptium.net/artifactory/deb $(awk -F= '/^VERSION_CODENAME/{print$2}' /etc/os-release) main" | sudo tee /etc/apt/sources.list.d/adoptium.list
 
-        sudo apt update
-        sudo apt install -y temurin-21-jdk
+        # Install required packages
+        sudo apt-get install -y wget apt-transport-https gnupg
+
+        # Download and add GPG key
+        wget -qO - https://packages.adoptium.net/artifactory/api/gpg/key/public | sudo gpg --dearmor -o /usr/share/keyrings/adoptium.gpg
+
+        # Add repository
+        echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb $(awk -F= '/^VERSION_CODENAME/{print$2}' /etc/os-release) main" | sudo tee /etc/apt/sources.list.d/adoptium.list
+
+        sudo apt-get update
+        sudo apt-get install -y temurin-21-jdk
         log_success "Eclipse Temurin JDK 21 installed"
     fi
 
@@ -448,6 +455,45 @@ install_jdk() {
     fi
 
     log_success "JDK 21 configuration complete"
+}
+
+# Install Ruby dependencies and Ruby via mise
+install_ruby() {
+    log_info "Installing Ruby dependencies..."
+
+    # Install Ruby build dependencies
+    local ruby_deps=(
+        "libffi-dev"
+        "libyaml-dev"
+        # "libssl-dev"
+        # "libreadline-dev"
+        # "zlib1g-dev"
+        # "libgdbm-dev"
+        # "libncurses5-dev"
+        # "libgmp-dev"
+        # "build-essential"
+        # "bison"
+    )
+
+    sudo apt install -y "${ruby_deps[@]}"
+    log_success "Ruby dependencies installed"
+
+    # Install Ruby via mise if mise is available
+    if command_exists mise; then
+        log_info "Installing Ruby latest using mise..."
+        if mise install ruby@latest 2>/dev/null && mise use -g ruby@latest 2>/dev/null; then
+            log_success "Ruby installed via mise"
+            log_info "Ruby version: $(ruby --version 2>/dev/null || echo 'Not available')"
+        else
+            log_error "Failed to install Ruby via mise"
+            log_info "You can try installing manually with: mise install ruby@latest"
+            return 1
+        fi
+    else
+        log_warning "mise not available, skipping Ruby installation"
+        log_info "Install mise first with: ./bootstrap.sh -i mise"
+        return 1
+    fi
 }
 
 # Install Warp Terminal
@@ -471,6 +517,24 @@ install_warp() {
 
     log_success "Warp Terminal installed successfully"
     log_info "You can launch it from the applications menu or run: warp-terminal"
+}
+
+# Install Tailscale VPN
+install_tailscale() {
+    log_info "Installing Tailscale..."
+
+    if command_exists tailscale; then
+        log_success "Tailscale already installed"
+        log_info "Tailscale version: $(tailscale version 2>/dev/null || echo 'Unknown')"
+        return
+    fi
+
+    log_info "Downloading and installing Tailscale..."
+    curl -fsSL https://tailscale.com/install.sh | sh
+
+    log_success "Tailscale installed successfully"
+    log_info "To start Tailscale, run: sudo tailscale up"
+    log_info "To check status, run: tailscale status"
 }
 
 # Install Vicinae (Raycast analog for Linux)
@@ -682,8 +746,10 @@ show_help() {
     echo "  bun                            Install Bun using mise"
     echo "  pnpm                           Install pnpm package manager"
     echo "  jdk                            Install Eclipse Temurin JDK 21"
+    echo "  ruby                           Install Ruby using mise"
     echo "  warp                           Install Warp Terminal"
     echo "  vicinae                        Install Vicinae (Raycast for Linux)"
+    echo "  tailscale                      Install Tailscale VPN"
     echo ""
     echo "Examples:"
     echo "  $0                                    # Run all functions"
@@ -706,7 +772,7 @@ show_versions() {
     echo "Starship: $(starship --version 2>/dev/null | head -n1 || echo 'Not available')"
     echo "mise: $(mise --version 2>/dev/null || echo 'Not available')"
     echo "bat: $(bat --version 2>/dev/null || echo 'Not available')"
-    echo "eza: $(eza --version 2>/dev/null | head -n1 || echo 'Not available')"
+    echo "eza: $(eza --version 2>/dev/null | head -n2 || echo 'Not available')"
     echo "zoxide: $(zoxide --version 2>/dev/null || echo 'Not available')"
     echo "rip2: $(rip --version 2>/dev/null || echo 'Not available')"
     echo "dust: $(dust --version 2>/dev/null || echo 'Not available')"
@@ -714,8 +780,10 @@ show_versions() {
     echo "Bun: $(bun --version 2>/dev/null || echo 'Not available')"
     echo "pnpm: $(pnpm --version 2>/dev/null || echo 'Not available')"
     echo "Java: $(java --version 2>/dev/null | head -n1 || echo 'Not available')"
+    echo "Ruby: $(ruby --version 2>/dev/null || echo 'Not available')"
     echo "Warp: $(warp-terminal --version 2>/dev/null || echo 'Not available')"
     echo "Vicinae: $(vicinae --version 2>/dev/null || echo 'Not available')"
+    echo "Tailscale: $(tailscale version 2>/dev/null || echo 'Not available')"
 }
 
 # Run all installation functions
@@ -833,11 +901,17 @@ main() {
                         jdk)
                             functions_to_run+=(install_jdk)
                             ;;
+                        ruby)
+                            functions_to_run+=(install_ruby)
+                            ;;
                         warp)
                             functions_to_run+=(install_warp)
                             ;;
                         vicinae)
                             functions_to_run+=(install_vicinae)
+                            ;;
+                        tailscale)
+                            functions_to_run+=(install_tailscale)
                             ;;
                         *)
                             log_error "Unknown function: $1"
