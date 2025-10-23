@@ -1,5 +1,11 @@
 #!/bin/zsh
 
+# Setup history
+HISTFILE=~/.histfile
+HISTSIZE=1000
+SAVEHIST=1000
+setopt appendhistory
+
 # eza (better ls) aliases
 # Replace ls with eza for better file listing with colors, icons, and git status
 

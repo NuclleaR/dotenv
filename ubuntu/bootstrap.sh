@@ -599,6 +599,62 @@ install_timeshift() {
     log_info "Or use the command line: sudo timeshift --create"
 }
 
+# Install Docker Engine
+install_docker() {
+    log_info "Installing Docker Engine..."
+
+    if command_exists docker; then
+        log_success "Docker already installed"
+        log_info "Docker version: $(docker --version 2>/dev/null || echo 'Unknown')"
+        return
+    fi
+
+    # Uninstall old versions
+    log_info "Removing old Docker packages if present..."
+    sudo apt remove -y docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc 2>/dev/null || true
+
+    # Set up Docker's apt repository
+    log_info "Setting up Docker apt repository..."
+
+    # Add Docker's official GPG key
+    sudo apt update
+    sudo apt install -y ca-certificates curl
+    sudo install -m 0755 -d /etc/apt/keyrings
+    sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+    sudo chmod a+r /etc/apt/keyrings/docker.asc
+
+    # Add the repository to Apt sources
+    echo \
+      "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+      $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+      sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+    # Install Docker Engine
+    log_info "Installing Docker Engine, containerd, and Docker Compose..."
+    sudo apt update
+    sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+    # Add user to docker group
+    log_info "Adding current user to docker group..."
+    sudo usermod -aG docker $USER
+
+    # Enable and start Docker service
+    log_info "Enabling and starting Docker service..."
+    sudo systemctl enable docker
+    sudo systemctl start docker
+
+    log_success "Docker Engine installed successfully"
+    log_info "Docker version: $(sudo docker --version)"
+    log_info "Docker Compose version: $(sudo docker compose version)"
+    echo ""
+    log_warning "=========================================="
+    log_warning "You need to log out and log back in (or restart)"
+    log_warning "to use Docker without sudo."
+    log_warning "=========================================="
+    echo ""
+    log_info "Test Docker installation with: docker run hello-world"
+}
+
 # Install Vicinae (Raycast analog for Linux)
 install_vicinae() {
     log_info "Installing Vicinae (Raycast analog for Linux)..."
@@ -816,6 +872,7 @@ show_help() {
     echo "  tailscale                      Install Tailscale VPN"
     echo "  slack                          Install Slack"
     echo "  timeshift                      Install Timeshift (system backup tool)"
+    echo "  docker                         Install Docker Engine"
     echo ""
     echo "Examples:"
     echo "  $0                                    # Run all functions"
@@ -854,6 +911,7 @@ show_versions() {
     echo "Tailscale: $(tailscale version 2>/dev/null || echo 'Not available')"
     echo "Slack: $(slack --version 2>/dev/null || echo 'Not available')"
     echo "Timeshift: $(timeshift --version 2>/dev/null || echo 'Not available')"
+    echo "Docker: $(docker --version 2>/dev/null || echo 'Not available')"
 }
 
 # Run all installation functions
@@ -995,6 +1053,9 @@ main() {
                             ;;
                         timeshift)
                             functions_to_run+=(install_timeshift)
+                            ;;
+                        docker)
+                            functions_to_run+=(install_docker)
                             ;;
                         *)
                             log_error "Unknown function: $1"
