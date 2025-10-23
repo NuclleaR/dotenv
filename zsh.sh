@@ -99,3 +99,5 @@ alias gunwip='git log -n 1 --format="%s" | grep -q "^WIP:" && git reset HEAD~1'
 alias gclean='git clean -fd'
 alias gtag='git tag'
 alias gshow='git show'
+
+alias vpn='sudo tailscale up'

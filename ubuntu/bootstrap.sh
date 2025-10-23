@@ -464,38 +464,24 @@ install_pnpm() {
     fi
 }
 
-# Install Eclipse Temurin JDK 21 for Android development
+# Install Eclipse Temurin JDK 21 using mise
 install_jdk() {
-    log_info "Installing Eclipse Temurin JDK 21 for Android development..."
+    log_info "Installing Eclipse Temurin JDK 21 using mise..."
 
-    # Check if JDK 21 is already installed
-    if dpkg -l | grep -q "temurin-21-jdk"; then
-        log_success "Eclipse Temurin JDK 21 already installed"
-    else
-        log_info "Adding Adoptium APT repository..."
-
-        # Install required packages
-        sudo apt-get install -y wget apt-transport-https gnupg
-
-        # Download and add GPG key
-        wget -qO - https://packages.adoptium.net/artifactory/api/gpg/key/public | sudo gpg --dearmor -o /usr/share/keyrings/adoptium.gpg
-
-        # Add repository
-        echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb $(awk -F= '/^VERSION_CODENAME/{print$2}' /etc/os-release) main" | sudo tee /etc/apt/sources.list.d/adoptium.list
-
-        sudo apt-get update
-        sudo apt-get install -y temurin-21-jdk
-        log_success "Eclipse Temurin JDK 21 installed"
-    fi
-
-    # Set JAVA_HOME in shell config
-    if ! grep -q "JAVA_HOME.*java-21" ~/.zshrc 2>/dev/null; then
-        # Remove any existing JAVA_HOME line first
-        if grep -q "JAVA_HOME" ~/.zshrc 2>/dev/null; then
-            sed -i '/JAVA_HOME/d' ~/.zshrc
+    if command_exists mise; then
+        log_info "Installing Java (Temurin 21) using mise..."
+        if mise install java@temurin-21 2>/dev/null && mise use -g java@temurin-21 2>/dev/null; then
+            log_success "Eclipse Temurin JDK 21 installed via mise"
+            log_info "Java version: $(java -version 2>&1 | head -n1 || echo 'Unknown')"
+        else
+            log_error "Failed to install JDK via mise"
+            log_info "You can try installing manually with: mise install java@temurin-21"
+            return 1
         fi
-        echo 'export JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64' >> ~/.zshrc
-        log_info "JAVA_HOME configured to point to Temurin JDK 21"
+    else
+        log_warning "mise not available, skipping JDK installation"
+        log_info "Install mise first with: ./bootstrap.sh -i mise"
+        return 1
     fi
 
     log_success "JDK 21 configuration complete"
@@ -579,6 +565,38 @@ install_tailscale() {
     log_success "Tailscale installed successfully"
     log_info "To start Tailscale, run: sudo tailscale up"
     log_info "To check status, run: tailscale status"
+}
+
+# Install Slack
+install_slack() {
+    log_info "Installing Slack..."
+
+    if command_exists slack; then
+        log_success "Slack already installed"
+        return
+    fi
+
+    log_info "Installing Slack from Snap Store..."
+    sudo snap install slack
+
+    log_success "Slack installed successfully"
+}
+
+# Install Timeshift
+install_timeshift() {
+    log_info "Installing Timeshift..."
+
+    if command_exists timeshift; then
+        log_success "Timeshift already installed"
+        return
+    fi
+
+    log_info "Installing Timeshift from APT..."
+    sudo apt install -y timeshift
+
+    log_success "Timeshift installed successfully"
+    log_info "To configure Timeshift, run: sudo timeshift-gtk"
+    log_info "Or use the command line: sudo timeshift --create"
 }
 
 # Install Vicinae (Raycast analog for Linux)
@@ -796,6 +814,8 @@ show_help() {
     echo "  warp                           Install Warp Terminal"
     echo "  vicinae                        Install Vicinae (Raycast for Linux)"
     echo "  tailscale                      Install Tailscale VPN"
+    echo "  slack                          Install Slack"
+    echo "  timeshift                      Install Timeshift (system backup tool)"
     echo ""
     echo "Examples:"
     echo "  $0                                    # Run all functions"
@@ -832,6 +852,8 @@ show_versions() {
     echo "Warp: $(warp-terminal --version 2>/dev/null || echo 'Not available')"
     echo "Vicinae: $(vicinae --version 2>/dev/null || echo 'Not available')"
     echo "Tailscale: $(tailscale version 2>/dev/null || echo 'Not available')"
+    echo "Slack: $(slack --version 2>/dev/null || echo 'Not available')"
+    echo "Timeshift: $(timeshift --version 2>/dev/null || echo 'Not available')"
 }
 
 # Run all installation functions
@@ -967,6 +989,12 @@ main() {
                             ;;
                         tailscale)
                             functions_to_run+=(install_tailscale)
+                            ;;
+                        slack)
+                            functions_to_run+=(install_slack)
+                            ;;
+                        timeshift)
+                            functions_to_run+=(install_timeshift)
                             ;;
                         *)
                             log_error "Unknown function: $1"
