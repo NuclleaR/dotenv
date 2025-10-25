@@ -7,7 +7,7 @@
 set -euo pipefail
 
 # Get the directory where this script is located
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$HOME/dev/dotenv/ubuntu"
 DOTENV_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Colors for output
@@ -42,6 +42,20 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Create ~/.bin and add to PATH in .zshrc
+install_user_bin() {
+    log_info "Creating ~/.bin and adding to PATH in .zshrc..."
+    mkdir -p "$HOME/.bin"
+    if ! grep -q 'export PATH="$HOME/.bin:$PATH"' "$HOME/.zshrc" 2>/dev/null; then
+        echo '' >> "$HOME/.zshrc"
+        echo '# Add ~/.bin to PATH' >> "$HOME/.zshrc"
+        echo 'export PATH="$HOME/.bin:$PATH"' >> "$HOME/.zshrc"
+        log_success "Added ~/.bin to PATH in .zshrc"
+    else
+        log_success "~/.bin already in PATH in .zshrc"
+    fi
+}
+
 # Check if running on Ubuntu or Pop!_OS
 check_ubuntu() {
     if [[ ! -f /etc/os-release ]]; then
@@ -50,7 +64,7 @@ check_ubuntu() {
     fi
 
     . /etc/os-release
-    if [[ "$ID" != "ubuntu" && "$ID" != "pop" ]]; then
+    if [[ "$ID" != "ubuntu" && "$ID" != "pop" && "$ID" != "neon" ]]; then
         log_error "This script is designed for Ubuntu or Pop!_OS only"
         log_error "Detected: $ID"
         exit 1
@@ -497,7 +511,7 @@ install_ruby() {
         "libyaml-dev"
         # "libssl-dev"
         # "libreadline-dev"
-        # "zlib1g-dev"
+        "zlib1g-dev"
         # "libgdbm-dev"
         # "libncurses5-dev"
         # "libgmp-dev"
@@ -671,9 +685,9 @@ install_vicinae() {
         "libwayland-dev"
         "qt6-base-dev"
         "qt6-wayland-dev"
-        "qt6-svg-dev"
-        "qt6-svg-plugins"
-        "qt6-svg-private-dev"
+        # "qt6-svg-dev"
+        # "qt6-svg-plugins"
+        # "qt6-svg-private-dev"
         "libqt6svg6"
         "qtkeychain-qt6-dev"
         "protobuf-compiler"
@@ -846,6 +860,7 @@ show_help() {
     echo "  --help, -h                     Show this help message"
     echo ""
     echo "Available Functions:"
+    echo "  install_user_bin                Create ~/.bin and add to PATH in .zshrc"
     echo "  create_zshrc                   Create .zshrc file if it doesn't exist"
     echo "  configure_dotenv_sourcing      Configure dotenv sourcing in ~/.zshrc"
     echo "  configure_git                  Configure Git with useful aliases and settings"
@@ -922,6 +937,7 @@ run_all() {
     check_ubuntu
     update_system
     create_zshrc
+    install_user_bin
     configure_dotenv_sourcing
     install_essential_packages
     install_git
@@ -982,6 +998,9 @@ main() {
                 while [[ $# -gt 0 && ! "$1" =~ ^- ]]; do
                     # Validate function name and map short names to actual function names
                     case $1 in
+                        install_user_bin)
+                            functions_to_run+=(install_user_bin)
+                            ;;
                         create_zshrc|configure_dotenv_sourcing|configure_git)
                             functions_to_run+=("$1")
                             ;;
