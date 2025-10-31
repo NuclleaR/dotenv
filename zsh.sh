@@ -106,4 +106,6 @@ alias gclean='git clean -fd'
 alias gtag='git tag'
 alias gshow='git show'
 
-alias vpn='sudo tailscale up'
+alias vpnu='sudo tailscale up --accept-routes'
+alias vpnd='sudo tailscale down'
+alias vpns='sudo tailscale status'
