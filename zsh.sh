@@ -1,5 +1,7 @@
 #!/bin/zsh
 
+autoload -Uz compinit && compinit
+
 # Setup history
 HISTFILE=~/.histfile
 HISTSIZE=1000
