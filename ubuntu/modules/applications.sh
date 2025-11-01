@@ -131,6 +131,29 @@ install_docker() {
     log_info "Test Docker installation with: docker run hello-world"
 }
 
+# Install Docker Desktop
+install_docker_desktop() {
+    log_info "Installing Docker Desktop..."
+
+    if command_exists docker-desktop; then
+        log_success "Docker Desktop already installed"
+        return
+    fi
+
+    log_info "Downloading Docker Desktop .deb package..."
+    # wget -O docker-desktop.deb "https://desktop.docker.com/linux/main/amd64/docker-desktop-latest.deb"
+    wget -O docker-desktop.deb "https://desktop.docker.com/linux/main/amd64/docker-desktop-amd64.deb"
+
+    log_info "Installing Docker Desktop..."
+    sudo apt install -y ./docker-desktop.deb
+
+    # Clean up
+    rm docker-desktop.deb
+
+    log_success "Docker Desktop installed successfully"
+    log_info "You can launch Docker Desktop from the applications menu or by running: docker-desktop"
+}
+
 # Install Vicinae (Raycast analog for Linux)
 install_vicinae() {
     log_info "Installing Vicinae (Raycast analog for Linux)..."

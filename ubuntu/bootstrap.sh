@@ -75,6 +75,7 @@ show_help() {
     echo "  slack                          Install Slack"
     echo "  timeshift                      Install Timeshift (system backup tool)"
     echo "  docker                         Install Docker Engine"
+    echo "  docker-desktop                 Install Docker Desktop"
     echo ""
     echo "Examples:"
     echo "  $0                                    # Run all functions"
@@ -210,6 +211,7 @@ group_apps() {
     install_slack
     install_timeshift
     install_docker
+    install_docker_desktop
     echo "=================================="
     log_success "Applications setup completed!"
 }
@@ -423,6 +425,9 @@ main() {
                             ;;
                         docker)
                             functions_to_run+=(install_docker)
+                            ;;
+                        docker-desktop)
+                            functions_to_run+=(install_docker_desktop)
                             ;;
                         *)
                             log_error "Unknown function: $1"
