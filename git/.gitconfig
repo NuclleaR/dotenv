@@ -1,0 +1,39 @@
+[init]
+	defaultBranch = main
+[pull]
+	rebase = false
+[core]
+	autocrlf = input
+	editor = nano
+	pager = delta
+[interactive]
+	diffFilter = delta --color-only
+[alias]
+	co = checkout
+	br = branch
+	ci = commit -a
+	cia = commit -a --amend
+	st = status
+	unstage = reset HEAD --
+	last = log -1 HEAD
+	rf = "!f() { git checkout HEAD -- \"$@\"; }; f"
+	sync = "!f() { echo \"Fetching latest changes...\" && git fetch --all && echo \"Attempting to merge with main/master...\" && (git merge --no-ff origin/main || git merge --no-ff origin/master || echo \"Merge conflicts detected. Please resolve manually\"); }; f"
+	rm = "!f() { git fetch --all && (git reset --hard origin/main || git reset --hard origin/master); }; f"
+	lg = log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit
+[credential "https://github.com"]
+	helper =
+	helper = !/usr/bin/gh auth git-credential
+[credential "https://gist.github.com"]
+	helper =
+	helper = !/usr/bin/gh auth git-credential
+[user]
+	name = NuclleaR
+	email = nuclear.890@gmail.com
+[merge]
+	conflictStyle = zdiff3
+[delta]
+	navigate = true  # use n and N to move between diff sections
+	dark = true      # or light = true, or omit for auto-detection
+	side-by-side = true
+	line-numbers = true
+	hyperlinks = true

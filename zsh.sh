@@ -50,6 +50,10 @@ alias treeg='eza --tree --git --color=always --group-directories-first --icons'
 alias cd='z'
 alias cdi='zi'  # Interactive mode with fzf-like interface
 
+alias trace='sudo traceroute -T'
+alias ins='sudo apt install -y'
+# alias search='grep -rn --color=auto "magicAuth" ./src --exclude-dir=node_modules | fzf'
+
 # Quick navigation aliases
 alias ..='cd ..'
 alias ...='cd ../..'
@@ -111,3 +115,34 @@ alias gshow='git show'
 alias vpnu='sudo tailscale up --accept-routes'
 alias vpnd='sudo tailscale down'
 alias vpns='sudo tailscale status'
+
+# Grep
+# alias grp='grep -rn --color=auto'
+# alias grpi='grep -rin --color=auto'
+# alias grpjs='grep -rn --include="*.js" --include="*.jsx" --color=auto'
+# alias grpts='grep -rn --include="*.ts" --include="*.tsx" --color=auto'
+# alias grpnm='grep -r --exclude-dir=node_modules --exclude-dir=build --exclude-dir=dist --color=auto'
+
+# Skim
+# Fuzzy file finder with preview using bat
+alias skf='sk --preview "bat --color=always --style=numbers {}" --preview-window=right:60%'
+
+# Interactive ripgrep search with file preview
+# Usage: skrg [rg options] [path]
+# Examples:
+#   skrg                      - search in current directory
+#   skrg src/                 - search only in src/
+#   skrg --type js            - search only in JS files
+#   skrg --glob "*.ts" src/   - search in TS files in src/
+skrg() {
+    local search_path="${*:-.}"
+    sk --ansi -i -c "rg --color=always --line-number --glob '!node_modules' '{}' $search_path" --delimiter : --preview "bat --color=always --style=numbers {1} --highlight-line {2}" --preview-window=right:60%
+}
+
+# Alternative: search in all files first, then filter
+alias skrga='rg --color=always --line-number . | sk --ansi --delimiter : --preview "bat --color=always --style=numbers {1} --highlight-line {2}" --preview-window=right:60%'
+
+
+# sudo systemctl stop docker
+# sudo systemctl stop docker.socket
+# systemctl --user stop docker
