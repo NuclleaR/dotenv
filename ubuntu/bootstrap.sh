@@ -53,9 +53,12 @@ show_help() {
     echo "  configure_git                  Configure Git with useful aliases and settings"
     echo "  essential                      Install essential development packages"
     echo "  git                            Install Git version control"
+    echo "  delta                          Install delta (better git diff)"
     echo "  gpg                            Install GPG (GNU Privacy Guard)"
     echo "  gh                             Install GitHub CLI (gh)"
     echo "  zsh                            Install Zsh shell and set as default"
+    echo "  zsh_autosuggestions            Install zsh-autosuggestions plugin"
+    echo "  zsh_syntax_highlighting        Install zsh-syntax-highlighting plugin"
     echo "  rust                           Install Rust and Cargo"
     echo "  starship                       Install Starship prompt"
     echo "  mise                           Install mise CLI version manager"
@@ -139,6 +142,8 @@ group_shell() {
     install_user_bin
     configure_dotenv_sourcing
     install_zsh
+    install_zsh_autosuggestions
+    install_zsh_syntax_highlighting
     install_starship
 
     # Create symlink to bootstrap script in ~/.bin
@@ -197,6 +202,7 @@ group_cli() {
     install_zoxide
     install_rip2
     install_dust
+    install_delta
     echo "=================================="
     log_success "CLI tools setup completed!"
 }
@@ -247,6 +253,8 @@ run_all() {
     install_github_cli
     configure_git
     install_zsh
+    install_zsh_autosuggestions
+    install_zsh_syntax_highlighting
     install_rust
     install_starship
     install_mise
@@ -371,6 +379,12 @@ main() {
                             ;;
                         zsh)
                             functions_to_run+=(install_zsh)
+                            ;;
+                        zsh_autosuggestions)
+                            functions_to_run+=(install_zsh_autosuggestions)
+                            ;;
+                        zsh_syntax_highlighting)
+                            functions_to_run+=(install_zsh_syntax_highlighting)
                             ;;
                         rust)
                             functions_to_run+=(install_rust)

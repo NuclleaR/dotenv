@@ -105,3 +105,24 @@ install_dust() {
         log_success "dust already installed"
     fi
 }
+
+install_delta() {
+    log_info "Installing delta (better git diff)..."
+
+    if ! command_exists delta; then
+        # Check if cargo is available
+        if ! command_exists cargo; then
+            log_error "Cargo is not installed. Please install Rust first."
+            log_info "Run: ./bootstrap.sh -i rust"
+            return 1
+        fi
+
+        log_info "Installing delta from crates.io via Cargo..."
+        cargo install git-delta
+
+        log_success "delta installed via Cargo"
+        log_info "delta binary location: $HOME/.cargo/bin/delta"
+    else
+        log_success "delta already installed"
+    fi
+}

@@ -4,6 +4,12 @@
   "typescript.inlayHints.variableTypes.enabled": true,
   "typescript.inlayHints.functionLikeReturnTypes.enabled": true,
 
+  "editor.fontFamily": "VictorMono Nerd Font",
+  "editor.fontLigatures": true,
+  "editor.fontVariations": true,
+  "editor.fontWeight": "bold",
+  "terminal.integrated.fontFamily": "GeistMono Nerd Font",
+
   "editor.semanticTokenColorCustomizations": {
     "enabled": true,
     "[Tokyo Night]": {

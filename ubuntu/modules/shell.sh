@@ -41,6 +41,50 @@ install_zsh() {
     fi
 }
 
+# Install zsh-autosuggestions plugin
+install_zsh_autosuggestions() {
+    log_info "Installing zsh-autosuggestions..."
+
+    # Create .zsh directory if it doesn't exist
+    mkdir -p ~/.zsh
+
+    # Clone zsh-autosuggestions if not already present
+    if [ ! -d ~/.zsh/plugins/zsh-autosuggestions ]; then
+        git clone https://github.com/zsh-users/zsh-autosuggestions ~/.zsh/plugins/zsh-autosuggestions
+        log_success "zsh-autosuggestions cloned successfully"
+
+        # Add source line to .zshrc if not already present
+        if ! grep -q "zsh-autosuggestions.zsh" ~/.zshrc 2>/dev/null; then
+            echo 'source ~/.zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh' >> ~/.zshrc
+            log_success "Added zsh-autosuggestions to .zshrc"
+        fi
+    else
+        log_success "zsh-autosuggestions already installed"
+    fi
+}
+
+# Install zsh-syntax-highlighting plugin
+install_zsh_syntax_highlighting() {
+    log_info "Installing zsh-syntax-highlighting..."
+
+    # Create .zsh/plugins directory if it doesn't exist
+    mkdir -p ~/.zsh/plugins
+
+    # Clone zsh-syntax-highlighting if not already present
+    if [ ! -d ~/.zsh/plugins/zsh-syntax-highlighting ]; then
+        git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ~/.zsh/plugins/zsh-syntax-highlighting
+        log_success "zsh-syntax-highlighting cloned successfully"
+
+        # Add source line to .zshrc if not already present
+        if ! grep -q "zsh-syntax-highlighting.zsh" ~/.zshrc 2>/dev/null; then
+            echo 'source ~/.zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh' >> ~/.zshrc
+            log_success "Added zsh-syntax-highlighting to .zshrc"
+        fi
+    else
+        log_success "zsh-syntax-highlighting already installed"
+    fi
+}
+
 # Install Starship prompt
 install_starship() {
     log_info "Installing Starship prompt..."
@@ -57,4 +101,10 @@ install_starship() {
     else
         log_success "Starship already installed"
     fi
+
+    # Apply Catppuccin Powerline preset
+    log_info "Applying Catppuccin Powerline preset..."
+    mkdir -p ~/.config
+    starship preset catppuccin-powerline -o ~/.config/starship.toml
+    log_success "Starship preset configured"
 }

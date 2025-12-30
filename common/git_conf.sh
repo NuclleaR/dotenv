@@ -26,5 +26,18 @@ configure_git() {
     git config --global alias.rm '!f() { git fetch --all && (git reset --hard origin/main || git reset --hard origin/master); }; f'
     git config --global alias.lg "log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit"
 
+    # Diff settings
+    git config --global core.pager delta
+    git config --global interactive.diffFilter "delta --color-only"
+    git config --global merge.conflictStyle zdiff3
+
+    # Delta setup
+    git config --global delta.navigate true
+    # git config --global delta.syntax-theme Dracula
+    git config --global delta.dark true
+    git config --global delta.side-by-side true
+    git config --global delta.line-numbers true
+    git config --global delta.hyperlinks true
+
     echo -e "${GREEN}[SUCCESS]${NC} Git configured with useful aliases"
 }
