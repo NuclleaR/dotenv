@@ -4,6 +4,7 @@
   "typescript.inlayHints.variableTypes.enabled": true,
   "typescript.inlayHints.functionLikeReturnTypes.enabled": true,
 
+  "workbench.iconTheme": "catppuccin-latte",
   "editor.fontFamily": "VictorMono Nerd Font",
   "editor.fontLigatures": true,
   "editor.fontVariations": true,
