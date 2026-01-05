@@ -10,6 +10,7 @@ SCRIPT_DIR="$HOME/dev/dotenv"
 
 # Source common utilities and logger
 source "$SCRIPT_DIR/common/logger.sh"
+source "$SCRIPT_DIR/common/git_conf.sh"
 source "$SCRIPT_DIR/arch/utils.sh"
 source "$SCRIPT_DIR/arch/shell.sh"
 
@@ -21,7 +22,7 @@ show_help() {
     echo ""
     echo "Options:"
     echo "  -u, --update                   Update system packages"
-    echo "  -i, --install PACKAGE          Install package (flatpak, vivaldi, docker-desktop, vscode, slack, localsend, yakuake, fastfetch, shell, zed)"
+    echo "  -i, --install PACKAGE          Install package (flatpak, vivaldi, docker-desktop, vscode, slack, localsend, yakuake, fastfetch, shell, zed, git)"
     echo "  -a, --all                      Update system and install Flatpak"
     echo "  -v, --versions                 Show installed versions"
     echo "  -h, --help                     Show this help message"
@@ -40,6 +41,7 @@ show_help() {
     echo "  $0 -i shell                    # Install Zsh and Starship shell"
     echo "  $0 -i zed                      # Install Zed editor"
     echo "  $0 -i tailscale                # Install Tailscale"
+    echo "  $0 -i git                      # Setup Git configuration"
     echo "  $0 -a                          # Update system and install Flatpak"
     echo "  $0 -u -i flatpak -i vivaldi    # Update, install Flatpak and Vivaldi"
 }
@@ -83,6 +85,7 @@ main() {
     local do_shell=false
     local do_zed=false
     local do_tailscale=false
+    local do_git=false
 
     # Parse command line arguments
     while [[ $# -gt 0 ]]; do
@@ -140,9 +143,12 @@ main() {
                     zed)
                         do_zed=true
                         ;;
+                    git)
+                        do_git=true
+                        ;;
                     *)
                         log_error "Unknown package: $1"
-                        log_info "Available packages: flatpak, vivaldi, docker-desktop, vscode, slack, localsend, yakuake, fastfetch, shell, zed"
+                        log_info "Available packages: flatpak, vivaldi, docker-desktop, vscode, slack, localsend, yakuake, fastfetch, shell, zed, git"
                         return 1
                         ;;
                 esac
@@ -215,7 +221,11 @@ main() {
         install_zed
     fi
 
-    if [[ "$do_update" == false && "$do_flatpak" == false && "$do_vivaldi" == false && "$do_docker_desktop" == false && "$do_vscode" == false && "$do_slack" == false && "$do_localsend" == false && "$do_yakuake" == false && "$do_fastfetch" == false && "$do_shell" == false && "$do_zed" == false ]]; then
+    if [[ "$do_git" == true ]]; then
+        setup_git
+    fi
+
+    if [[ "$do_update" == false && "$do_flatpak" == false && "$do_vivaldi" == false && "$do_docker_desktop" == false && "$do_vscode" == false && "$do_slack" == false && "$do_localsend" == false && "$do_yakuake" == false && "$do_fastfetch" == false && "$do_shell" == false && "$do_zed" == false && "$do_git" == false ]]; then
         log_error "No operation specified"
         show_help
         return 1

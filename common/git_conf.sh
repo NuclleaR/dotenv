@@ -4,6 +4,42 @@
 # This script configures Git with useful aliases and settings
 # Can be sourced from any bootstrap script
 
+setup_git() {
+    echo -e "${BLUE}[INFO]${NC} Setting up Git configuration..."
+
+    # Get the script directory and dotenv root
+    local SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local DOTENV_ROOT="$(dirname "$SCRIPT_DIR")"
+
+    # Create symlink for global gitignore
+    local GITIGNORE_SOURCE="$DOTENV_ROOT/git/gitignore_global"
+    local GITIGNORE_TARGET="$HOME/.gitignore_global"
+
+    if [[ -f "$GITIGNORE_SOURCE" ]]; then
+        if [[ -L "$GITIGNORE_TARGET" ]]; then
+            echo -e "${BLUE}[INFO]${NC} Global gitignore symlink already exists"
+        elif [[ -f "$GITIGNORE_TARGET" ]]; then
+            echo -e "${YELLOW}[WARNING]${NC} $GITIGNORE_TARGET already exists (not a symlink), backing up..."
+            mv "$GITIGNORE_TARGET" "$GITIGNORE_TARGET.backup"
+            ln -sf "$GITIGNORE_SOURCE" "$GITIGNORE_TARGET"
+            echo -e "${GREEN}[SUCCESS]${NC} Created global gitignore symlink"
+        else
+            ln -sf "$GITIGNORE_SOURCE" "$GITIGNORE_TARGET"
+            echo -e "${GREEN}[SUCCESS]${NC} Created global gitignore symlink"
+        fi
+
+        # Configure git to use global gitignore
+        git config --global core.excludesfile "$GITIGNORE_TARGET"
+    else
+        echo -e "${YELLOW}[WARNING]${NC} Global gitignore file not found at $GITIGNORE_SOURCE"
+    fi
+
+    # Run git configuration
+    configure_git
+
+    echo -e "${GREEN}[SUCCESS]${NC} Git setup completed"
+}
+
 configure_git() {
     echo -e "${BLUE}[INFO]${NC} Configuring Git..."
 

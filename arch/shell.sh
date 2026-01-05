@@ -75,6 +75,15 @@ install_shell() {
         log_success "zsh-syntax-highlighting configured in .zshrc"
     fi
 
+    # Add PATH configuration to .zshrc if not already there
+    if ! grep -q '\$HOME/.bin' "$HOME/.zshrc"; then
+        log_info "Configuring PATH in .zshrc..."
+        echo "" >> "$HOME/.zshrc"
+        echo "# Add local bin directory to PATH" >> "$HOME/.zshrc"
+        echo 'export PATH="$PATH:$HOME/.bin"' >> "$HOME/.zshrc"
+        log_success "PATH configured in .zshrc"
+    fi
+
     # Set Zsh as default shell
     if [[ "$SHELL" != *"zsh"* ]]; then
         log_info "Setting Zsh as default shell..."
