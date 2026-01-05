@@ -6,12 +6,11 @@
 set -euo pipefail
 
 # Get the directory where this script is located
-SCRIPT_DIR="$HOME/dev/dotenv/arch"
-DOTENV_ROOT="$(dirname "$SCRIPT_DIR")"
+SCRIPT_DIR="$HOME/dev/dotenv"
 
 # Source common utilities and logger
-source "$DOTENV_ROOT/common/logger.sh"
-source "$SCRIPT_DIR/modules/utils.sh"
+source "$SCRIPT_DIR/common/logger.sh"
+source "$SCRIPT_DIR/arch/utils.sh"
 
 # Show help message
 show_help() {
