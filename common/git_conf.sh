@@ -7,6 +7,15 @@
 setup_git() {
     echo -e "${BLUE}[INFO]${NC} Setting up Git configuration..."
 
+    # Install git-delta if not present
+    if ! command -v delta &> /dev/null; then
+        echo -e "${BLUE}[INFO]${NC} Installing git-delta..."
+        sudo pacman -S --noconfirm git-delta
+        echo -e "${GREEN}[SUCCESS]${NC} git-delta installed"
+    else
+        echo -e "${GREEN}[SUCCESS]${NC} git-delta already installed"
+    fi
+
     # Get the script directory and dotenv root
     local SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     local DOTENV_ROOT="$(dirname "$SCRIPT_DIR")"
