@@ -59,7 +59,7 @@ show_versions() {
     echo "Starship: $(command -v starship >/dev/null 2>&1 && starship --version | head -n1 || echo 'Not available')"
     echo "Zed: $(command -v zed >/dev/null 2>&1 && zed --version 2>/dev/null | head -n1 || echo 'Not available')"
     echo "Tailscale: $(command -v tailscale >/dev/null 2>&1 && tailscale version || echo 'Not available')"
-}}
+}
 
 # Main function with argument parsing
 main() {
