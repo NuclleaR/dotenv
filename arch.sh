@@ -484,11 +484,8 @@ install_zed() {
         return
     fi
 
-    # Ensure yay is installed
-    install_yay
-
-    log_info "Installing Zed from AUR..."
-    yay -S --noconfirm zed
+    log_info "Installing Zed from Script..."
+    curl -f https://zed.dev/install.sh | sh
 
     log_success "Zed installed successfully"
     log_info "You can launch Zed from your application menu or run 'zed'"
