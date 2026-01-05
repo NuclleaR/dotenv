@@ -72,7 +72,7 @@ main() {
     local do_update=false
     local do_flatpak=false
     local do_vivaldi=false
-    local do_docker
+    local do_docker=false
     local do_docker_desktop=false
     local do_vscode=false
     local do_slack=false
