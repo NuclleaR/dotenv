@@ -11,6 +11,7 @@ SCRIPT_DIR="$HOME/dev/dotenv"
 # Source common utilities and logger
 source "$SCRIPT_DIR/common/logger.sh"
 source "$SCRIPT_DIR/arch/utils.sh"
+source "$SCRIPT_DIR/arch/shell.sh"
 
 # Show help message
 show_help() {
