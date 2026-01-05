@@ -8,6 +8,8 @@ HISTSIZE=1000
 SAVEHIST=1000
 setopt appendhistory
 
+export GITHUB_USERNAME=NuclleaR
+
 # eza (better ls) aliases
 # Replace ls with eza for better file listing with colors, icons, and git status
 
@@ -45,13 +47,8 @@ alias lx='eza -l --extended --color=always --group-directories-first --icons'
 alias tree='eza --tree --color=always --group-directories-first --icons'
 alias treeg='eza --tree --git --color=always --group-directories-first --icons'
 
-# zoxide (better cd) aliases
-# Replace cd with z for smart directory jumping based on frequency and recency
-alias cd='z'
-alias cdi='zi'  # Interactive mode with fzf-like interface
-
 alias trace='sudo traceroute -T'
-alias ins='sudo apt install -y'
+# alias ins='sudo apt install -y'
 # alias search='grep -rn --color=auto "magicAuth" ./src --exclude-dir=node_modules | fzf'
 
 # Quick navigation aliases
@@ -140,7 +137,7 @@ skrg() {
 }
 
 # Alternative: search in all files first, then filter
-alias skrga='rg --color=always --line-number . | sk --ansi --delimiter : --preview "bat --color=always --style=numbers {1} --highlight-line {2}" --preview-window=right:60%'
+# alias skrga='rg --color=always --line-number . | sk --ansi --delimiter : --preview "bat --color=always --style=numbers {1} --highlight-line {2}" --preview-window=right:60%'
 
 
 # sudo systemctl stop docker
