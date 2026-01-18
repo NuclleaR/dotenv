@@ -22,7 +22,7 @@ show_help() {
     echo ""
     echo "Options:"
     echo "  -u, --update                   Update system packages"
-    echo "  -i, --install PACKAGE          Install package (flatpak, vivaldi, docker-desktop, vscode, slack, localsend, yakuake, fastfetch, shell, zed, git)"
+    echo "  -i, --install PACKAGE          Install package (flatpak, vivaldi, docker-desktop, vscode, slack, localsend, yakuake, fastfetch, shell, zed, git, snapper, grub)"
     echo "  -a, --all                      Update system and install Flatpak"
     echo "  -v, --versions                 Show installed versions"
     echo "  -h, --help                     Show this help message"
@@ -40,8 +40,10 @@ show_help() {
     echo "  $0 -i fastfetch                # Install Fastfetch (system info tool)"
     echo "  $0 -i shell                    # Install Zsh and Starship shell"
     echo "  $0 -i zed                      # Install Zed editor"
-    echo "  $0 -i tailscale                # Install Tailscale"
+    echo "  $0 -i vpn                      # Install Tailscale"
     echo "  $0 -i git                      # Setup Git configuration"
+    echo "  $0 -i snapper                  # Install Snapper for BTRFS snapshots"
+    echo "  $0 -i grub                     # Setup GRUB with BTRFS support"
     echo "  $0 -a                          # Update system and install Flatpak"
     echo "  $0 -u -i flatpak -i vivaldi    # Update, install Flatpak and Vivaldi"
 }
@@ -62,6 +64,8 @@ show_versions() {
     echo "Starship: $(command -v starship >/dev/null 2>&1 && starship --version | head -n1 || echo 'Not available')"
     echo "Zed: $(command -v zed >/dev/null 2>&1 && zed --version 2>/dev/null | head -n1 || echo 'Not available')"
     echo "Tailscale: $(command -v tailscale >/dev/null 2>&1 && tailscale version || echo 'Not available')"
+    echo "Snapper: $(command -v snapper >/dev/null 2>&1 && snapper --version | head -n1 || echo 'Not available')"
+    echo "GRUB-BTRFS: $(systemctl is-enabled grub-btrfsd.service 2>/dev/null || echo 'Not available')"
 }
 
 # Main function with argument parsing
@@ -86,6 +90,8 @@ main() {
     local do_zed=false
     local do_tailscale=false
     local do_git=false
+    local do_snapper=false
+    local do_grub=false
 
     # Parse command line arguments
     while [[ $# -gt 0 ]]; do
@@ -146,9 +152,18 @@ main() {
                     git)
                         do_git=true
                         ;;
+                    vpn)
+                        do_tailscale=true
+                        ;;
+                    snapper)
+                        do_snapper=true
+                        ;;
+                    grub)
+                        do_grub=true
+                        ;;
                     *)
                         log_error "Unknown package: $1"
-                        log_info "Available packages: flatpak, vivaldi, docker-desktop, vscode, slack, localsend, yakuake, fastfetch, shell, zed, git"
+                        log_info "Available packages: flatpak, vivaldi, docker-desktop, vscode, slack, localsend, yakuake, fastfetch, shell, zed, git, snapper, grub, vpn"
                         return 1
                         ;;
                 esac
@@ -225,7 +240,19 @@ main() {
         setup_git
     fi
 
-    if [[ "$do_update" == false && "$do_flatpak" == false && "$do_vivaldi" == false && "$do_docker_desktop" == false && "$do_vscode" == false && "$do_slack" == false && "$do_localsend" == false && "$do_yakuake" == false && "$do_fastfetch" == false && "$do_shell" == false && "$do_zed" == false && "$do_git" == false ]]; then
+    if [[ "$do_tailscale" == true ]]; then
+        install_tailscale
+    fi
+
+    if [[ "$do_snapper" == true ]]; then
+        install_snapper
+    fi
+
+    if [[ "$do_grub" == true ]]; then
+        setup_grub_btrfs
+    fi
+
+    if [[ "$do_update" == false && "$do_flatpak" == false && "$do_vivaldi" == false && "$do_docker_desktop" == false && "$do_vscode" == false && "$do_slack" == false && "$do_localsend" == false && "$do_yakuake" == false && "$do_fastfetch" == false && "$do_shell" == false && "$do_zed" == false && "$do_git" == false && "$do_snapper" == false && "$do_grub" == false ]]; then
         log_error "No operation specified"
         show_help
         return 1
@@ -499,6 +526,90 @@ install_zed() {
 
     log_success "Zed installed successfully"
     log_info "You can launch Zed from your application menu or run 'zed'"
+}
+
+# Install Snapper and BTRFS Assistant
+install_snapper() {
+    log_info "Installing Snapper for BTRFS snapshots..."
+
+    if command_exists snapper; then
+        log_success "Snapper already installed"
+        log_info "Snapper version: $(snapper --version | head -n1)"
+    else
+        # Ensure yay is installed
+        install_yay
+
+        log_info "Installing Snapper..."
+        yay -S --noconfirm snapper
+        log_success "Snapper installed successfully"
+    fi
+
+    # Install BTRFS Assistant
+    if ! command_exists btrfs-assistant; then
+        log_info "Installing BTRFS Assistant..."
+        yay -S --noconfirm btrfs-assistant
+        log_success "BTRFS Assistant installed successfully"
+    else
+        log_success "BTRFS Assistant already installed"
+    fi
+
+    # Install snap-pac (for automatic snapshots on pacman operations)
+    if ! pacman -Qi snap-pac &>/dev/null; then
+        log_info "Installing snap-pac for automatic snapshots..."
+        yay -S --noconfirm snap-pac
+        log_success "snap-pac installed successfully"
+    else
+        log_success "snap-pac already installed"
+    fi
+
+    log_success "Snapper setup completed!"
+    log_info "Use 'btrfs-assistant' GUI or 'snapper' CLI to manage snapshots"
+    log_info "Automatic snapshots will be created before/after pacman operations"
+}
+
+# Setup GRUB with BTRFS support
+setup_grub_btrfs() {
+    log_info "Setting up GRUB with BTRFS snapshot support..."
+
+    # Ensure yay is installed
+    install_yay
+
+    # Install grub-btrfs
+    if ! pacman -Qi grub-btrfs &>/dev/null; then
+        log_info "Installing grub-btrfs..."
+        yay -S --noconfirm grub-btrfs
+        log_success "grub-btrfs installed successfully"
+    else
+        log_success "grub-btrfs already installed"
+    fi
+
+    # Install inotify-tools (required for grub-btrfsd service)
+    if ! pacman -Qi inotify-tools &>/dev/null; then
+        log_info "Installing inotify-tools..."
+        yay -S --noconfirm inotify-tools
+        log_success "inotify-tools installed successfully"
+    else
+        log_success "inotify-tools already installed"
+    fi
+
+    # Enable and start grub-btrfsd service
+    log_info "Enabling grub-btrfsd service..."
+    sudo systemctl enable --now grub-btrfsd.service
+
+    # Check if service is running
+    if systemctl is-active --quiet grub-btrfsd.service; then
+        log_success "grub-btrfsd service is running"
+    else
+        log_warning "grub-btrfsd service failed to start. Check status with: sudo systemctl status grub-btrfsd.service"
+    fi
+
+    # Update GRUB configuration
+    log_info "Updating GRUB configuration..."
+    sudo grub-mkconfig -o /boot/grub/grub.cfg
+
+    log_success "GRUB BTRFS setup completed!"
+    log_info "GRUB will now automatically detect BTRFS snapshots at boot"
+    log_info "Snapshots will appear in the GRUB menu under 'Arch Linux snapshots'"
 }
 
 # Run the main function

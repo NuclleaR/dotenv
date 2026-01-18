@@ -84,6 +84,43 @@ install_shell() {
         log_success "PATH configured in .zshrc"
     fi
 
+    # Configure Zsh history if not already configured
+    if ! grep -q 'HISTFILE=' "$HOME/.zshrc"; then
+        log_info "Configuring Zsh history in .zshrc..."
+        cat >> "$HOME/.zshrc" <<'EOF'
+
+# Zsh history
+HISTFILE="$HOME/.zsh_history"
+HISTSIZE=100000
+SAVEHIST=100000
+setopt APPEND_HISTORY        # append on exit
+setopt INC_APPEND_HISTORY    # write incrementally
+setopt SHARE_HISTORY         # merge across sessions
+setopt HIST_IGNORE_SPACE     # ignore commands starting with space
+setopt HIST_IGNORE_ALL_DUPS  # drop duplicates
+setopt EXTENDED_HISTORY      # timestamps
+EOF
+        touch "$HOME/.zsh_history"
+        chmod 600 "$HOME/.zsh_history"
+        log_success "Zsh history configured in .zshrc"
+    else
+        log_success "Zsh history already configured in .zshrc"
+    fi
+
+    # Configure compinit for Zsh
+    if ! grep -q 'autoload.*compinit' "$HOME/.zshrc"; then
+        log_info "Configuring compinit in .zshrc..."
+        cat >> "$HOME/.zshrc" <<'EOF'
+
+# Enable Zsh completion system (includes Git)
+autoload -Uz compinit
+compinit
+EOF
+        log_success "Compinit configured in .zshrc"
+    else
+        log_success "Compinit already configured in .zshrc"
+    fi
+
     # Set Zsh as default shell
     if [[ "$SHELL" != *"zsh"* ]]; then
         log_info "Setting Zsh as default shell..."
