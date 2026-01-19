@@ -13,6 +13,7 @@ source "$SCRIPT_DIR/common/logger.sh"
 source "$SCRIPT_DIR/common/git_conf.sh"
 source "$SCRIPT_DIR/arch/utils.sh"
 source "$SCRIPT_DIR/arch/shell.sh"
+source "$SCRIPT_DIR/arch/drivers.sh"
 
 # Show help message
 show_help() {
@@ -22,7 +23,7 @@ show_help() {
     echo ""
     echo "Options:"
     echo "  -u, --update                   Update system packages"
-    echo "  -i, --install PACKAGE          Install package (flatpak, vivaldi, docker-desktop, vscode, slack, localsend, yakuake, fastfetch, shell, zed, git, snapper, grub)"
+    echo "  -i, --install PACKAGE          Install package (flatpak, vivaldi, docker-desktop, vscode, slack, localsend, yakuake, fastfetch, shell, zed, git, snapper, grub, cli, vpn, drivers)"
     echo "  -a, --all                      Update system and install Flatpak"
     echo "  -v, --versions                 Show installed versions"
     echo "  -h, --help                     Show this help message"
@@ -44,7 +45,7 @@ show_help() {
     echo "  $0 -i git                      # Setup Git configuration"
     echo "  $0 -i snapper                  # Install Snapper for BTRFS snapshots"
     echo "  $0 -i grub                     # Setup GRUB with BTRFS support"
-    echo "  $0 -a                          # Update system and install Flatpak"
+    echo "  $0 -i cli                      # Install CLI tools (bat, eza, zoxide, rip2, dust)"echo "  $0 -i drivers                  # Install GPU drivers (NVIDIA)"    echo "  $0 -a                          # Update system and install Flatpak"
     echo "  $0 -u -i flatpak -i vivaldi    # Update, install Flatpak and Vivaldi"
 }
 
@@ -92,6 +93,8 @@ main() {
     local do_git=false
     local do_snapper=false
     local do_grub=false
+    local do_cli_tools=false
+    local do_drivers=false
 
     # Parse command line arguments
     while [[ $# -gt 0 ]]; do
@@ -161,9 +164,15 @@ main() {
                     grub)
                         do_grub=true
                         ;;
+                    cli)
+                        do_cli_tools=true
+                        ;;
+                    drivers)
+                        do_drivers=true
+                        ;;
                     *)
                         log_error "Unknown package: $1"
-                        log_info "Available packages: flatpak, vivaldi, docker-desktop, vscode, slack, localsend, yakuake, fastfetch, shell, zed, git, snapper, grub, vpn"
+                        log_info "Available packages: flatpak, vivaldi, docker-desktop, vscode, slack, localsend, yakuake, fastfetch, shell, zed, git, snapper, grub, cli, vpn, drivers"
                         return 1
                         ;;
                 esac
@@ -252,7 +261,17 @@ main() {
         setup_grub_btrfs
     fi
 
-    if [[ "$do_update" == false && "$do_flatpak" == false && "$do_vivaldi" == false && "$do_docker_desktop" == false && "$do_vscode" == false && "$do_slack" == false && "$do_localsend" == false && "$do_yakuake" == false && "$do_fastfetch" == false && "$do_shell" == false && "$do_zed" == false && "$do_git" == false && "$do_snapper" == false && "$do_grub" == false ]]; then
+    if [[ "$do_cli_tools" == true ]]; then
+        install_cli_tools
+    fi
+
+    if [[ "$do_drivers" == true ]]; then
+        # Drivers script needs to run with separate checks
+        log_info "Driver installation requires additional privileges"
+        log_info "Run: sudo $SCRIPT_DIR/arch/drivers.sh -a"
+    fi
+
+    if [[ "$do_update" == false && "$do_flatpak" == false && "$do_vivaldi" == false && "$do_docker_desktop" == false && "$do_vscode" == false && "$do_slack" == false && "$do_localsend" == false && "$do_yakuake" == false && "$do_fastfetch" == false && "$do_shell" == false && "$do_zed" == false && "$do_git" == false && "$do_snapper" == false && "$do_grub" == false && "$do_cli_tools" == false && "$do_drivers" == false ]]; then
         log_error "No operation specified"
         show_help
         return 1
@@ -610,6 +629,101 @@ setup_grub_btrfs() {
     log_success "GRUB BTRFS setup completed!"
     log_info "GRUB will now automatically detect BTRFS snapshots at boot"
     log_info "Snapshots will appear in the GRUB menu under 'Arch Linux snapshots'"
+}
+
+# Install bat (better cat)
+install_bat() {
+    log_info "Installing bat..."
+
+    if command_exists bat; then
+        log_success "bat already installed"
+        log_info "bat version: $(bat --version)"
+        return
+    fi
+
+    sudo pacman -S --noconfirm bat
+    log_success "bat installed successfully"
+}
+
+# Install eza (better ls)
+install_eza() {
+    log_info "Installing eza..."
+
+    if command_exists eza; then
+        log_success "eza already installed"
+        log_info "eza version: $(eza --version | head -n2)"
+        return
+    fi
+
+    sudo pacman -S --noconfirm eza
+    log_success "eza installed successfully"
+}
+
+# Install zoxide (better cd)
+install_zoxide() {
+    log_info "Installing zoxide..."
+
+    if command_exists zoxide; then
+        log_success "zoxide already installed"
+        log_info "zoxide version: $(zoxide --version)"
+        return
+    fi
+
+    sudo pacman -S --noconfirm zoxide
+    log_success "zoxide installed successfully"
+
+    # Add zoxide init to shell config if not already present
+    if ! grep -q "zoxide init" ~/.zshrc 2>/dev/null; then
+        echo 'eval "$(zoxide init zsh)"' >> ~/.zshrc
+    fi
+
+    # zoxide (better cd) aliases
+    # Replace cd with z for smart directory jumping based on frequency and recency
+    # alias cd='z'
+    # alias cdi='zi'  # Interactive mode with fzf-like interface
+}
+
+# Install rip2 (better rm)
+install_rip2() {
+    log_info "Installing rip2..."
+
+    if command_exists rip; then
+        log_success "rip2 already installed"
+        log_info "rip version: $(rip --version)"
+        return
+    fi
+
+    log_info "Installing rip2 via cargo..."
+    if ! command_exists cargo; then
+        log_error "Cargo not found. Please install Rust first."
+        return 1
+    fi
+
+    cargo install rm-improved
+    log_success "rip2 installed successfully"
+}
+
+# Install dust (better du)
+install_dust() {
+    log_info "Installing dust..."
+
+    if command_exists dust; then
+        log_success "dust already installed"
+        log_info "dust version: $(dust --version)"
+        return
+    fi
+
+    sudo pacman -S --noconfirm dust
+    log_success "dust installed successfully"
+}
+
+
+install_cli_tools() {
+    install_bat
+    install_eza
+    install_zoxide
+    install_rip2
+    install_dust
 }
 
 # Run the main function
