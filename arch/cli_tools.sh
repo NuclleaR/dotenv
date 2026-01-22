@@ -88,6 +88,29 @@ install_dust() {
     log_success "dust installed successfully"
 }
 
+# Install skim (fuzzy finder)
+install_skim() {
+    log_info "Installing skim (sk)..."
+
+    if command_exists sk; then
+        log_success "skim already installed"
+        log_info "skim version: $(sk --version | head -n1)"
+        return
+    fi
+
+    # Use upstream installer to get latest stable binary (avoids old repo/AUR builds)
+    local SKIM_VERSION="1.5.1"
+    local SKIM_INSTALLER_URL="https://github.com/skim-rs/skim/releases/download/v${SKIM_VERSION}/skim-installer.sh"
+
+    log_info "Downloading skim installer v${SKIM_VERSION}..."
+    if ! curl --proto '=https' --tlsv1.2 -LsSf "$SKIM_INSTALLER_URL" | sh; then
+        log_error "skim install failed via upstream installer"
+        return 1
+    fi
+
+    log_success "skim installed successfully (v${SKIM_VERSION})"
+}
+
 # Install delta (better git diff)
 install_delta() {
     log_info "Installing delta..."

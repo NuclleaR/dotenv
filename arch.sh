@@ -13,7 +13,7 @@ source "$SCRIPT_DIR/common/logger.sh"
 source "$SCRIPT_DIR/common/git_conf.sh"
 source "$SCRIPT_DIR/arch/utils.sh"
 source "$SCRIPT_DIR/arch/shell.sh"
-source "$SCRIPT_DIR/arch/drivers.sh"
+source "$SCRIPT_DIR/arch/env_setup.sh"
 
 # Show help message
 show_help() {
@@ -23,7 +23,7 @@ show_help() {
     echo ""
     echo "Options:"
     echo "  -u, --update                   Update system packages"
-    echo "  -i, --install PACKAGE          Install package (flatpak, vivaldi, docker-desktop, vscode, slack, localsend, yakuake, fastfetch, shell, zed, git, snapper, grub, cli, vpn, drivers)"
+    echo "  -i, --install PACKAGE          Install package (flatpak, vivaldi, docker-desktop, vscode, slack, localsend, yakuake, fastfetch, shell, zed, git, rust, snapper, grub, cli, vpn, keyd, zram, kwallet, wl-clipboard)"
     echo "  -a, --all                      Update system and install Flatpak"
     echo "  -v, --versions                 Show installed versions"
     echo "  -h, --help                     Show this help message"
@@ -45,7 +45,10 @@ show_help() {
     echo "  $0 -i git                      # Setup Git configuration"
     echo "  $0 -i snapper                  # Install Snapper for BTRFS snapshots"
     echo "  $0 -i grub                     # Setup GRUB with BTRFS support"
-    echo "  $0 -i cli                      # Install CLI tools (bat, eza, zoxide, rip2, dust)"echo "  $0 -i drivers                  # Install GPU drivers (NVIDIA)"    echo "  $0 -a                          # Update system and install Flatpak"
+    echo "  $0 -i cli                      # Install CLI tools (bat, eza, zoxide, rip2, dust, skim)"
+    echo "  $0 -i keyd                     # Install keyd (key remapper)"
+    echo "  $0 -i zram                     # Setup Zram compressed swap"
+    echo "  $0 -a                          # Update system and install Flatpak"
     echo "  $0 -u -i flatpak -i vivaldi    # Update, install Flatpak and Vivaldi"
 }
 
@@ -65,6 +68,7 @@ show_versions() {
     echo "Starship: $(command -v starship >/dev/null 2>&1 && starship --version | head -n1 || echo 'Not available')"
     echo "Zed: $(command -v zed >/dev/null 2>&1 && zed --version 2>/dev/null | head -n1 || echo 'Not available')"
     echo "Tailscale: $(command -v tailscale >/dev/null 2>&1 && tailscale version || echo 'Not available')"
+    echo "Rust: $(command -v rustc >/dev/null 2>&1 && rustc --version | head -n1 || echo 'Not available')"
     echo "Snapper: $(command -v snapper >/dev/null 2>&1 && snapper --version | head -n1 || echo 'Not available')"
     echo "GRUB-BTRFS: $(systemctl is-enabled grub-btrfsd.service 2>/dev/null || echo 'Not available')"
 }
@@ -91,10 +95,14 @@ main() {
     local do_zed=false
     local do_tailscale=false
     local do_git=false
+    local do_rust=false
     local do_snapper=false
     local do_grub=false
     local do_cli_tools=false
-    local do_drivers=false
+    local do_keyd=false
+    local do_zram=false
+    local do_kwallet=false
+    local do_wl_clipboard=false
 
     # Parse command line arguments
     while [[ $# -gt 0 ]]; do
@@ -155,6 +163,9 @@ main() {
                     git)
                         do_git=true
                         ;;
+                    rust)
+                        do_rust=true
+                        ;;
                     vpn)
                         do_tailscale=true
                         ;;
@@ -167,12 +178,21 @@ main() {
                     cli)
                         do_cli_tools=true
                         ;;
-                    drivers)
-                        do_drivers=true
+                    keyd)
+                        do_keyd=true
+                        ;;
+                    zram)
+                        do_zram=true
+                        ;;
+                    kwallet)
+                        do_kwallet=true
+                        ;;
+                    wl-clipboard)
+                        do_wl_clipboard=true
                         ;;
                     *)
                         log_error "Unknown package: $1"
-                        log_info "Available packages: flatpak, vivaldi, docker-desktop, vscode, slack, localsend, yakuake, fastfetch, shell, zed, git, snapper, grub, cli, vpn, drivers"
+                        log_info "Available packages: flatpak, vivaldi, docker-desktop, vscode, slack, localsend, yakuake, fastfetch, shell, zed, git, rust, snapper, grub, cli, vpn, keyd, zram, kwallet, wl-clipboard"
                         return 1
                         ;;
                 esac
@@ -249,6 +269,10 @@ main() {
         setup_git
     fi
 
+    if [[ "$do_rust" == true ]]; then
+        install_rust
+    fi
+
     if [[ "$do_tailscale" == true ]]; then
         install_tailscale
     fi
@@ -263,15 +287,26 @@ main() {
 
     if [[ "$do_cli_tools" == true ]]; then
         install_cli_tools
+        configure_dotenv_sourcing
     fi
 
-    if [[ "$do_drivers" == true ]]; then
-        # Drivers script needs to run with separate checks
-        log_info "Driver installation requires additional privileges"
-        log_info "Run: sudo $SCRIPT_DIR/arch/drivers.sh -a"
+    if [[ "$do_keyd" == true ]]; then
+        install_keyd
     fi
 
-    if [[ "$do_update" == false && "$do_flatpak" == false && "$do_vivaldi" == false && "$do_docker_desktop" == false && "$do_vscode" == false && "$do_slack" == false && "$do_localsend" == false && "$do_yakuake" == false && "$do_fastfetch" == false && "$do_shell" == false && "$do_zed" == false && "$do_git" == false && "$do_snapper" == false && "$do_grub" == false && "$do_cli_tools" == false && "$do_drivers" == false ]]; then
+    if [[ "$do_zram" == true ]]; then
+        setup_zram
+    fi
+
+    if [[ "$do_kwallet" == true ]]; then
+        install_kwallet
+    fi
+
+    if [[ "$do_wl_clipboard" == true ]]; then
+        install_wl_clipboard
+    fi
+
+    if [[ "$do_update" == false && "$do_flatpak" == false && "$do_vivaldi" == false && "$do_docker_desktop" == false && "$do_vscode" == false && "$do_slack" == false && "$do_localsend" == false && "$do_yakuake" == false && "$do_fastfetch" == false && "$do_shell" == false && "$do_zed" == false && "$do_git" == false && "$do_rust" == false && "$do_snapper" == false && "$do_grub" == false && "$do_cli_tools" == false && "$do_keyd" == false && "$do_zram" == false && "$do_kwallet" == false && "$do_wl_clipboard" == false ]]; then
         log_error "No operation specified"
         show_help
         return 1
@@ -717,6 +752,164 @@ install_dust() {
     log_success "dust installed successfully"
 }
 
+# Install skim (fuzzy finder)
+install_skim() {
+    log_info "Installing skim (sk)..."
+
+    if command_exists sk; then
+        log_success "skim already installed"
+        log_info "skim version: $(sk --version | head -n1)"
+        return
+    fi
+
+    # Install via cargo to avoid missing/old distro packages
+    if ! command_exists cargo; then
+        log_warning "Cargo not found; continuing with upstream installer"
+    fi
+
+    # Use upstream installer to get latest stable binary (avoids old repo/AUR builds)
+    local SKIM_VERSION="1.5.1"
+    local SKIM_INSTALLER_URL="https://github.com/skim-rs/skim/releases/download/v${SKIM_VERSION}/skim-installer.sh"
+
+    log_info "Downloading skim installer v${SKIM_VERSION}..."
+    if ! curl --proto '=https' --tlsv1.2 -LsSf "$SKIM_INSTALLER_URL" | sh; then
+        log_error "skim install failed via upstream installer"
+        return 1
+    fi
+
+    log_success "skim installed successfully (v${SKIM_VERSION})"
+}
+
+# Install keyd (key remapper)
+install_keyd() {
+    log_info "Installing keyd..."
+
+    if command_exists keyd; then
+        log_success "keyd already installed"
+        return
+    fi
+
+    log_info "Installing keyd from AUR..."
+    install_yay
+    yay -S --noconfirm keyd
+
+    log_info "Setting up keyd configuration..."
+    sudo mkdir -p /etc/keyd
+
+    # Create default keyd configuration
+    sudo tee /etc/keyd/default.conf > /dev/null << 'EOF'
+[ids]
+*
+
+[alt]
+left  = home
+right = end
+EOF
+
+    log_info "Enabling keyd service..."
+    sudo systemctl enable keyd
+    sudo systemctl restart keyd
+
+    log_success "keyd installed and configured successfully"
+    log_info "Configuration file: /etc/keyd/default.conf"
+    log_info "Service status: $(sudo systemctl is-active keyd)"
+}
+
+# Install KWallet (KDE wallet + askpass)
+install_kwallet() {
+    log_info "Installing KWallet..."
+
+    # Warn if KDE is not present; KWallet still installs but may not unlock automatically
+    if ! command_exists plasmashell; then
+        log_warning "KDE Plasma not detected. KWallet auto-unlock may require manual PAM setup."
+    fi
+
+    sudo pacman -S --noconfirm kwallet kwalletmanager kwallet-pam ksshaskpass
+    log_success "KWallet packages installed (kwalletmanager, kwallet-pam, ksshaskpass)"
+    log_info "Configure PAM for auto-unlock if needed (see Arch wiki: KWallet)"
+}
+
+# Install wl-clipboard (Wayland clipboard utilities)
+install_wl_clipboard() {
+    log_info "Installing wl-clipboard..."
+
+    if command_exists wl-copy && command_exists wl-paste; then
+        log_success "wl-clipboard already installed"
+        return
+    fi
+
+    sudo pacman -S --noconfirm wl-clipboard
+    log_success "wl-clipboard installed successfully"
+}
+
+# Setup Zram (compressed swap)
+setup_zram() {
+    log_info "Setting up Zram (compressed swap)..."
+
+    # Check if zram-generator is already installed
+    if pacman -Qi zram-generator &>/dev/null; then
+        log_success "zram-generator already installed"
+    else
+        log_info "Installing zram-generator..."
+        sudo pacman -S --noconfirm zram-generator
+        log_success "zram-generator installed"
+    fi
+
+    # Create zram configuration directory if it doesn't exist
+    sudo mkdir -p /etc/systemd/zram-generator.conf.d
+
+    log_info "Creating Zram configuration..."
+    sudo tee /etc/systemd/zram-generator.conf.d/zram.conf > /dev/null << 'EOF'
+# Zram configuration for systemd-zram-generator
+[zram0]
+compression-algorithm = zstd
+zram-size = min(ram / 2, 4096)
+swap-priority = 100
+fs-type = swap
+EOF
+
+    log_info "Enabling systemd-zram-setup service..."
+    sudo systemctl daemon-reload
+    sudo systemctl enable systemd-zram-setup@zram0.service
+    sudo systemctl start systemd-zram-setup@zram0.service
+
+    if sudo systemctl is-active --quiet systemd-zram-setup@zram0.service; then
+        log_success "Zram service is active"
+    else
+        log_warning "Zram service failed to start. Check status with: sudo systemctl status systemd-zram-setup@zram0.service"
+    fi
+
+    log_success "Zram setup completed!"
+    log_info "Configuration file: /etc/systemd/zram-generator.conf.d/zram.conf"
+    log_info "Monitor with: watch 'zramctl; echo; free -h'"
+}
+
+# Install Rust toolchain via rustup
+install_rust() {
+    log_info "Installing Rust toolchain (rustup)..."
+
+    # Install rustup if missing
+    if command_exists rustup; then
+        log_success "rustup already installed"
+    else
+        log_info "Installing rustup from official repository..."
+        sudo pacman -S --noconfirm rustup
+        log_success "rustup installed"
+    fi
+
+    # Install and set stable toolchain as default
+    log_info "Ensuring stable toolchain is installed..."
+    rustup toolchain install stable
+    rustup default stable
+
+    # Install common components
+    log_info "Installing Rust components (rustfmt, clippy)..."
+    rustup component add rustfmt clippy
+
+    log_success "Rust toolchain installed"
+    log_info "Rust version: $(rustc --version 2>/dev/null || echo 'Unavailable')"
+}
+
 
 install_cli_tools() {
     install_bat
@@ -724,6 +917,7 @@ install_cli_tools() {
     install_zoxide
     install_rip2
     install_dust
+    install_skim
 }
 
 # Run the main function

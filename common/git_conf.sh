@@ -47,6 +47,11 @@ setup_git() {
     configure_git
 
     echo -e "${GREEN}[SUCCESS]${NC} Git setup completed"
+
+    # Enable ssh-agent service for the user
+    echo -e "${BLUE}[INFO]${NC} Enabling ssh-agent service for the user..."
+    systemctl --user enable ssh-agent
+    systemctl --user start ssh-agent
 }
 
 configure_git() {

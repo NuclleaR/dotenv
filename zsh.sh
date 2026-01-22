@@ -10,6 +10,15 @@ setopt appendhistory
 
 export GITHUB_USERNAME=NuclleaR
 
+# export SSH_AUTH_SOCK=/home/serhii/.bitwarden-ssh-agent.sock
+export SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent.socket"
+
+export RIP_GRAVEYARD=~/.local/share/Trash
+
+# wl-clipboard shortcut
+alias wlc='wl-copy'
+alias xx='wl-copy'
+
 # eza (better ls) aliases
 # Replace ls with eza for better file listing with colors, icons, and git status
 
