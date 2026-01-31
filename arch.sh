@@ -23,7 +23,7 @@ show_help() {
     echo ""
     echo "Options:"
     echo "  -u, --update                   Update system packages"
-    echo "  -i, --install PACKAGE          Install package (flatpak, vivaldi, docker-desktop, vscode, slack, localsend, yakuake, fastfetch, shell, zed, git, rust, snapper, grub, cli, vpn, keyd, zram, kwallet, wl-clipboard)"
+    echo "  -i, --install PACKAGE          Install package (flatpak, vivaldi, docker-desktop, vscode, slack, localsend, yakuake, fastfetch, shell, zed, git, rust, snapper, grub, cli, vpn, keyd, zram, kwallet, wl-clipboard, fonts)"
     echo "  -a, --all                      Update system and install Flatpak"
     echo "  -v, --versions                 Show installed versions"
     echo "  -h, --help                     Show this help message"
@@ -48,6 +48,9 @@ show_help() {
     echo "  $0 -i cli                      # Install CLI tools (bat, eza, zoxide, rip2, dust, skim)"
     echo "  $0 -i keyd                     # Install keyd (key remapper)"
     echo "  $0 -i zram                     # Setup Zram compressed swap"
+    echo "  $0 -i kwallet                  # Install KWallet (KDE wallet + askpass)"
+    echo "  $0 -i wl-clipboard                # Install wl-clipboard (Wayland clipboard utilities)"
+    echo "  $0 -i fonts                    # Install Nerd Fonts"
     echo "  $0 -a                          # Update system and install Flatpak"
     echo "  $0 -u -i flatpak -i vivaldi    # Update, install Flatpak and Vivaldi"
 }
@@ -103,6 +106,7 @@ main() {
     local do_zram=false
     local do_kwallet=false
     local do_wl_clipboard=false
+    local do_fonts=false
 
     # Parse command line arguments
     while [[ $# -gt 0 ]]; do
@@ -190,9 +194,12 @@ main() {
                     wl-clipboard)
                         do_wl_clipboard=true
                         ;;
+                    fonts)
+                        do_fonts=true
+                        ;;
                     *)
                         log_error "Unknown package: $1"
-                        log_info "Available packages: flatpak, vivaldi, docker-desktop, vscode, slack, localsend, yakuake, fastfetch, shell, zed, git, rust, snapper, grub, cli, vpn, keyd, zram, kwallet, wl-clipboard"
+                        log_info "Available packages: flatpak, vivaldi, docker-desktop, vscode, slack, localsend, yakuake, fastfetch, shell, zed, git, rust, snapper, grub, cli, vpn, keyd, zram, kwallet, wl-clipboard, fonts"
                         return 1
                         ;;
                 esac
@@ -306,7 +313,11 @@ main() {
         install_wl_clipboard
     fi
 
-    if [[ "$do_update" == false && "$do_flatpak" == false && "$do_vivaldi" == false && "$do_docker_desktop" == false && "$do_vscode" == false && "$do_slack" == false && "$do_localsend" == false && "$do_yakuake" == false && "$do_fastfetch" == false && "$do_shell" == false && "$do_zed" == false && "$do_git" == false && "$do_rust" == false && "$do_snapper" == false && "$do_grub" == false && "$do_cli_tools" == false && "$do_keyd" == false && "$do_zram" == false && "$do_kwallet" == false && "$do_wl_clipboard" == false ]]; then
+    if [[ "$do_fonts" == true ]]; then
+        install_fonts
+    fi
+
+    if [[ "$do_update" == false && "$do_flatpak" == false && "$do_vivaldi" == false && "$do_docker_desktop" == false && "$do_vscode" == false && "$do_slack" == false && "$do_localsend" == false && "$do_yakuake" == false && "$do_fastfetch" == false && "$do_shell" == false && "$do_zed" == false && "$do_git" == false && "$do_rust" == false && "$do_snapper" == false && "$do_grub" == false && "$do_cli_tools" == false && "$do_keyd" == false && "$do_zram" == false && "$do_kwallet" == false && "$do_wl_clipboard" == false && "$do_fonts" == false ]]; then
         log_error "No operation specified"
         show_help
         return 1
@@ -840,6 +851,55 @@ install_wl_clipboard() {
 
     sudo pacman -S --noconfirm wl-clipboard
     log_success "wl-clipboard installed successfully"
+}
+
+# Install Nerd Fonts (Apple, Victor Mono, Roboto Mono)
+install_fonts() {
+    log_info "Installing Nerd Fonts..."
+
+    local fonts_to_install=()
+
+    # Check and add Victor Mono
+    if ! fc-list | grep -qi "victor.*mono"; then
+        fonts_to_install+=("ttf-victor-mono-nerd")
+    else
+        log_success "Victor Mono Nerd Font already installed"
+    fi
+
+    # Check and add Roboto Mono
+    if ! fc-list | grep -qi "roboto.*mono"; then
+        fonts_to_install+=("ttf-roboto-mono-nerd")
+    else
+        log_success "Roboto Mono Nerd Font already installed"
+    fi
+
+    # Check and add Apple from AUR
+    local has_apple=false
+    if fc-list | grep -qi "apple.*nerd"; then
+        log_success "Apple Nerd Font already installed"
+        has_apple=true
+    else
+        has_apple=false
+    fi
+
+    # Install official repo fonts if needed
+    if [[ ${#fonts_to_install[@]} -gt 0 ]]; then
+        log_info "Installing fonts from official repository: ${fonts_to_install[*]}..."
+        sudo pacman -S --noconfirm "${fonts_to_install[@]}"
+    fi
+
+    # Install Apple font from AUR if not present
+    if [[ "$has_apple" == false ]]; then
+        log_info "Installing nerd-fonts-apple from AUR..."
+        install_yay
+        yay -S --noconfirm nerd-fonts-apple
+    fi
+
+    log_info "Updating font cache..."
+    fc-cache -fv
+
+    log_success "Nerd Fonts installed successfully!"
+    log_info "Installed: Victor Mono, Roboto Mono, Apple Nerd Fonts"
 }
 
 # Setup Zram (compressed swap)

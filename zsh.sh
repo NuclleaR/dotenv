@@ -3,10 +3,31 @@
 autoload -Uz compinit && compinit
 
 # Setup history
-HISTFILE=~/.histfile
-HISTSIZE=1000
-SAVEHIST=1000
-setopt appendhistory
+# Zsh history
+HISTFILE="$HOME/.zsh_history"
+HISTSIZE=100000
+SAVEHIST=100000
+setopt APPEND_HISTORY        # append on exit
+setopt INC_APPEND_HISTORY    # write incrementally
+setopt SHARE_HISTORY         # merge across sessions
+setopt HIST_IGNORE_SPACE     # ignore commands starting with space
+setopt HIST_IGNORE_ALL_DUPS  # drop duplicates
+setopt EXTENDED_HISTORY      # timestamps
+
+# Enable Zsh completion system (includes Git)
+autoload -Uz compinit
+compinit
+
+# Word navigation - Alt+Q/W
+bindkey '^[q' backward-word
+bindkey '^[w' forward-word
+
+# Home / End
+bindkey '^[[H' beginning-of-line
+bindkey '^[[F' end-of-line
+# Home / End (alternative)
+bindkey '^[[1~' beginning-of-line
+bindkey '^[[4~' end-of-line
 
 export GITHUB_USERNAME=NuclleaR
 
