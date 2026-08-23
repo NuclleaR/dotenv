@@ -1,7 +1,12 @@
 #!/bin/bash
 
 # Rust installation module (distribution independent)
-# Requires the logger and utils modules to be sourced by the caller
+# Run it directly (./common/rust.sh) or source it and call install_rust
+
+COMMON_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+source "$COMMON_DIR/logger.sh"
+source "$COMMON_DIR/utils.sh"
 
 # Install Rust via rustup if it is not present
 install_rust() {
@@ -36,3 +41,8 @@ install_rust() {
     log_info "Cargo version: $(cargo --version)"
     log_info "Cargo lands on PATH in new shells via shared/zsh.sh -> shared/cargo.sh"
 }
+
+# Run only when executed directly, not when sourced
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    install_rust
+fi
