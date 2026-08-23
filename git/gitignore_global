@@ -21,7 +21,14 @@ yarn-error.log*
 dist/
 build/
 
+# Any file with .local. in the name
+*.local.*
+
 # Env
 .env
 .env.local
 .env.*
+**/.claude/settings.local.json
+
+# Temp / scratch
+tmp/

@@ -111,7 +111,7 @@ alias gb='git branch'
 alias gba='git branch -a'
 alias gbd='git branch -d'
 alias gbD='git branch -D'
-alias gco='git checkout'
+# alias gco='git checkout'
 alias gcb='git checkout -b'
 alias gsw='git switch'
 alias gswc='git switch -c'
@@ -151,8 +151,20 @@ alias vpns='sudo tailscale status'
 # alias grpnm='grep -r --exclude-dir=node_modules --exclude-dir=build --exclude-dir=dist --color=auto'
 
 # Skim
+
 # Fuzzy file finder with preview using bat
+export SKIM_DEFAULT_COMMAND="git ls-tree -r --name-only HEAD || rg --files"
 alias skf='sk --preview "bat --color=always --style=numbers {}" --preview-window=right:60%'
+
+gco() {
+  local branch
+  branch=$(
+    git branch --format='%(refname:short)' | sk \
+      --preview 'git log --oneline --color=always -10 {}' \
+      --preview-window=right:60%
+  )
+  [ -n "$branch" ] && git switch "$branch"
+}
 
 # Interactive ripgrep search with file preview
 # Usage: skrg [rg options] [path]
@@ -163,7 +175,10 @@ alias skf='sk --preview "bat --color=always --style=numbers {}" --preview-window
 #   skrg --glob "*.ts" src/   - search in TS files in src/
 skrg() {
     local search_path="${*:-.}"
-    sk --ansi -i -c "rg --color=always --line-number --glob '!node_modules' '{}' $search_path" --delimiter : --preview "bat --color=always --style=numbers {1} --highlight-line {2}" --preview-window=right:60%
+    sk --ansi -i -c "rg --color=always --line-number --fixed-strings --glob '!node_modules' {q} \"$search_path\"" \
+        --delimiter : \
+        --preview 'bat --color=always --style=numbers {1} --highlight-line {2}' \
+        --preview-window=right:60%
 }
 
 # Alternative: search in all files first, then filter
