@@ -130,28 +130,6 @@ clone_zsh_plugin() {
     log_success "$NAME installed"
 }
 
-# Point .zshrc at the shared config (starship init and plugins live there)
-configure_zshrc() {
-    local ZSHRC="$HOME/.zshrc"
-    local CONFIG="$DOTENV_ROOT/shared/zsh.sh"
-
-    if [[ ! -f "$ZSHRC" ]]; then
-        log_info "Creating .zshrc file..."
-        touch "$ZSHRC"
-    fi
-
-    if grep -qF "shared/zsh.sh" "$ZSHRC"; then
-        log_success "Common Zsh config already sourced in .zshrc"
-        return 0
-    fi
-
-    log_info "Sourcing common Zsh config in .zshrc..."
-    echo "" >> "$ZSHRC"
-    echo "# Common Zsh config from the dotenv repo" >> "$ZSHRC"
-    echo "source \"$CONFIG\"" >> "$ZSHRC"
-    log_success "Common Zsh config sourced in .zshrc"
-}
-
 # Tell how to switch the login shell (the setup never changes it silently)
 show_default_shell_hint() {
     local ZSH_PATH
@@ -177,7 +155,7 @@ main() {
     install_prerequisites
     install_starship
     install_zsh_plugins
-    configure_zshrc
+    setup_zshrc
 
     echo ""
     log_success "Shell setup completed!"
