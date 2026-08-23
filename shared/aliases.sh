@@ -38,6 +38,13 @@ if command -v zoxide >/dev/null; then
     alias cdi='zi'
 fi
 
+# cargo-binstall (prebuilt binaries instead of building from source)
+if command -v cargo-binstall >/dev/null; then
+    alias cbi='cargo binstall'
+    alias cbiy='cargo binstall -y'
+    alias cbif='cargo binstall --force'
+fi
+
 # Швидкий підйом по директоріях
 alias ..='cd ..'
 alias ...='cd ../..'

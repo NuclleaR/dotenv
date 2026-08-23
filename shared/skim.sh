@@ -5,6 +5,25 @@ source <(sk --shell zsh)
 export SKIM_DEFAULT_COMMAND="git ls-tree -r --name-only HEAD || rg --files"
 alias skf='sk --preview "bat --color=always --style=numbers {}" --preview-window=right:60%'
 
+# Jump to a directory from the zoxide database, picked with skim
+# Usage: cdd [keywords...]   - keywords narrow the list before the picker opens
+cdd() {
+    if ! command -v zoxide >/dev/null; then
+        echo "cdd: zoxide is not installed" >&2
+        return 1
+    fi
+
+    local dir
+    dir=$(
+        zoxide query -l "$@" | sk \
+            --preview 'eza -la --color=always {} 2>/dev/null || ls -la {}' \
+            --preview-window=right:60%
+    )
+
+    # z instead of cd, so the jump is recorded in the zoxide database
+    [ -n "$dir" ] && z "$dir"
+}
+
 gco() {
   local branch
   branch=$(
