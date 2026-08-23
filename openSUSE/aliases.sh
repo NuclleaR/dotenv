@@ -1,7 +1,7 @@
 # zypper
 alias zyp='sudo zypper'
 # zypper refresh and update
-alias zup='sudo zypper ref && sudo zypper up -n'
+alias zup='sudo zypper ref && sudo zypper dup -n'
 # zypper dist-upgrade
 alias zdup='sudo zypper dup -n'
 # zypper search
