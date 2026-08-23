@@ -130,6 +130,29 @@ clone_zsh_plugin() {
     log_success "$NAME installed"
 }
 
+# Add the openSUSE specific aliases (zypper) to .zshrc.
+# They are distro specific, so they cannot live in the shared config.
+configure_zypper_aliases() {
+    local ZSHRC="$HOME/.zshrc"
+    local ALIASES="$SCRIPT_DIR/aliases.sh"
+
+    if [[ ! -f "$ALIASES" ]]; then
+        log_warning "openSUSE aliases not found at $ALIASES"
+        return 1
+    fi
+
+    if [[ -f "$ZSHRC" ]] && grep -qF "openSUSE/aliases.sh" "$ZSHRC"; then
+        log_success "openSUSE aliases already sourced in .zshrc"
+        return 0
+    fi
+
+    log_info "Sourcing openSUSE aliases in .zshrc..."
+    echo "" >> "$ZSHRC"
+    echo "# openSUSE specific aliases (zypper)" >> "$ZSHRC"
+    echo "source \"$ALIASES\"" >> "$ZSHRC"
+    log_success "openSUSE aliases sourced in .zshrc"
+}
+
 # Tell how to switch the login shell (the setup never changes it silently)
 show_default_shell_hint() {
     local ZSH_PATH
@@ -156,6 +179,7 @@ main() {
     install_starship
     install_zsh_plugins
     setup_zshrc
+    configure_zypper_aliases
 
     echo ""
     log_success "Shell setup completed!"
