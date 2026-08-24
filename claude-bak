@@ -1,0 +1,441 @@
+#!/usr/bin/env bash
+#
+# claude-bak — бекап і перенесення конфігу Claude Code між машинами.
+#
+#   ./claude-bak tar [-o ФАЙЛ] [--with-memory] [--with-credentials]
+#   ./claude-bak up  [АРХІВ] [--dest ТЕКА] [--force] [--no-fix]
+#   ./claude-bak fix [--from СТАРИЙ_HOME] [--to НОВИЙ_HOME] [-n]
+#   ./claude-bak ls  [АРХІВ]
+#
+set -euo pipefail
+
+CONFIG_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+STATE_FILE="$HOME/.claude.json"
+TS="$(date +%Y%m%d-%H%M%S)"
+
+c_red=$'\033[31m'; c_yel=$'\033[33m'; c_grn=$'\033[32m'; c_dim=$'\033[2m'; c_off=$'\033[0m'
+info() { printf '%s==>%s %s\n' "$c_grn" "$c_off" "$*"; }
+warn() { printf '%s!!!%s %s\n' "$c_yel" "$c_off" "$*" >&2; }
+die()  { printf '%sxxx%s %s\n' "$c_red" "$c_off" "$*" >&2; exit 1; }
+dim()  { printf '%s    %s%s\n' "$c_dim" "$*" "$c_off"; }
+
+JUNK=(
+  projects file-history shell-snapshots paste-cache image-cache uploads
+  debug backups usage-data plans tasks session-env sessions
+  todos statsig logs cache feedback-bundles
+  remote-settings.json policy-limits.json stats-cache.json history.jsonl
+  ide .DS_Store
+)
+
+# Патерни без слеша — tar матчить їх на будь-якій глибині.
+JUNK_ANY=( node_modules 'temp_git_*' .orphaned_at )
+
+usage() {
+  cat <<'USAGE'
+claude-bak — бекап конфігу Claude Code (~/.claude + ~/.claude.json)
+
+КОМАНДИ
+  tar    спакувати конфіг у claude-backup-<дата>.tar.gz
+  up     розгорнути архів (на новій машині)
+  fix    переписати абсолютні шляхи під нового користувача
+  gc     прибрати осиротілі версії плагінів і temp_git_* з диска
+  ls     показати вміст архіву
+
+tar [опції]
+  -o, --out ФАЙЛ          куди писати архів
+      --with-memory       додати auto-memory (~/.claude/projects/*/memory/)
+      --with-credentials  додати .credentials.json  [НЕБЕЗПЕЧНО]
+      --deref             розіменувати симлінки в plugins/ (пакувати вміст)
+  -n, --dry-run           показати, що потрапить в архів
+
+up [АРХІВ] [опції]
+  без аргументу бере найсвіжіший claude-backup-*.tar.gz у поточній теці
+      --dest ТЕКА         куди розпакувати (типово $HOME)
+  -f, --force             не робити резервну копію наявного конфігу
+      --no-fix            не переписувати шляхи автоматично
+  -n, --dry-run           показати план
+
+gc [опції]
+  -n, --dry-run           тільки показати, що буде видалено
+  -y, --yes               не питати підтвердження
+
+fix [опції]
+      --from ШЛЯХ         старий home (типово визначається автоматично)
+      --to ШЛЯХ           новий home (типово $HOME)
+  -n, --dry-run           показати, що буде змінено
+
+ПРИКЛАД
+  стара машина:  ./claude-bak tar
+  нова машина:   ./claude-bak up claude-backup-20260824-101500.tar.gz
+USAGE
+}
+
+newest_archive() {
+  local f
+  f=$(ls -1t claude-backup-*.tar.gz 2>/dev/null | head -n1 || true)
+  [[ -n "$f" ]] || die "не знайшов claude-backup-*.tar.gz — вкажи архів явно"
+  printf '%s' "$f"
+}
+
+# ---------------------------------------------------------------- tar
+
+cmd_tar() {
+  local out="" dry=0 with_memory=0 with_creds=0 deref=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -o|--out) out="${2:?потрібен шлях після $1}"; shift 2 ;;
+      --with-memory) with_memory=1; shift ;;
+      --with-credentials) with_creds=1; shift ;;
+      --deref) deref=1; shift ;;
+      -n|--dry-run) dry=1; shift ;;
+      -h|--help) usage; exit 0 ;;
+      *) die "невідома опція: $1" ;;
+    esac
+  done
+  [[ -n "$out" ]] || out="claude-backup-${TS}.tar.gz"
+  [[ -d "$CONFIG_DIR" ]] || die "не знайшов $CONFIG_DIR"
+
+  local parent name
+  parent=$(cd "$(dirname "$CONFIG_DIR")" && pwd)
+  name=$(basename "$CONFIG_DIR")
+
+  local args=()
+  for j in "${JUNK[@]}"; do
+    [[ $with_memory -eq 1 && "$j" == "projects" ]] && continue
+    args+=(--exclude="$name/$j")
+  done
+  if [[ $with_memory -eq 1 ]]; then
+    args+=(--exclude="$name/projects/*/*.jsonl")
+    args+=(--exclude="$name/projects/*/subagents")
+    args+=(--exclude="$name/projects/*/tool-results")
+  fi
+  [[ $with_creds -eq 1 ]] || args+=(--exclude="$name/.credentials.json")
+  [[ $deref -eq 1 ]] && args+=(-h)
+
+  for p in "${JUNK_ANY[@]}"; do args+=(--exclude="$p"); done
+
+  # осиротілі версії плагінів — знаходимо за маркером і виключаємо теку цілком
+  local orphans=() m d
+  while IFS= read -r m; do
+    d=$(dirname "$m")
+    orphans+=("$d")
+    args+=(--exclude="$name/${d#$CONFIG_DIR/}")
+  done < <(find "$CONFIG_DIR/plugins/cache" -type f -name '.orphaned_at' 2>/dev/null || true)
+  if [[ ${#orphans[@]} -gt 0 ]]; then
+    dim "пропускаю осиротілих версій плагінів: ${#orphans[@]} (./claude-bak gc — щоб видалити з диска)"
+  fi
+
+  # попередження про dev-симлінки в кеші плагінів
+  local links
+  links=$(find "$CONFIG_DIR/plugins" -type l 2>/dev/null || true)
+  if [[ -n "$links" && $deref -eq 0 ]]; then
+    warn "у plugins/ є симлінки — в архів піде сам лінк, не вміст:"
+    while IFS= read -r l; do
+      printf '      %s -> %s\n' "${l#$CONFIG_DIR/}" "$(readlink "$l")" >&2
+    done <<< "$links"
+    dim "додай --deref, щоб запакувати вміст, або перевстанови плагін на новій машині"
+  fi
+
+  if [[ $dry -eq 1 ]]; then
+    info "у архів потрапить:"
+    tar czf /dev/null -v "${args[@]}" -C "$parent" "$name" 2>&1 | sed 's/^/    /'
+    [[ -f "$STATE_FILE" ]] && dim ".claude.json"
+    return 0
+  fi
+
+  info "пакую $CONFIG_DIR"
+  if [[ -f "$STATE_FILE" ]]; then
+    tar czf "$out" "${args[@]}" -C "$parent" "$name" -C "$HOME" ".claude.json"
+  else
+    warn "$STATE_FILE відсутній — MCP-сервери й сесія логіна не потраплять в архів"
+    tar czf "$out" "${args[@]}" -C "$parent" "$name"
+  fi
+  chmod 600 "$out"
+
+  info "готово: $out ($(du -h "$out" | cut -f1))"
+  dim "старий home: $HOME  (знадобиться для ./claude-bak fix)"
+  if [[ $with_creds -eq 1 ]]; then
+    warn "в архіві є .credentials.json — не клади його в git"
+  else
+    dim "креденшали не включені — на новій машині зроби /login"
+  fi
+}
+
+# ---------------------------------------------------------------- fix
+
+detect_old_home() {
+  local root="$1"
+  {
+    [[ -f "$root/.claude.json" ]] && cat "$root/.claude.json"
+    find "$root/.claude" -maxdepth 1 -name '*.json' -type f -exec cat {} + 2>/dev/null
+    find "$root/.claude/plugins" -maxdepth 2 -name '*.json' -type f -exec cat {} + 2>/dev/null
+    find "$root/.claude/plugins" -type l -exec readlink {} + 2>/dev/null
+    ls -1 "$root/.claude/projects" 2>/dev/null | tr '-' '/'
+  } 2>/dev/null \
+    | grep -oE '/(home|Users)/[A-Za-z0-9._-]+' \
+    | sort | uniq -c | sort -rn | head -n1 | awk '{print $2}' || true
+}
+
+fix_targets() {
+  local cfg="$1/.claude"
+  [[ -f "$1/.claude.json" ]] && printf '%s\n' "$1/.claude.json"
+  find "$cfg" -maxdepth 1 -type f \( -name '*.json' -o -name '*.md' \) 2>/dev/null
+  find "$cfg/plugins" -maxdepth 2 -type f -name '*.json' 2>/dev/null
+  find "$cfg/agents" "$cfg/skills" "$cfg/commands" "$cfg/rules" "$cfg/hooks" \
+       "$cfg/output-styles" "$cfg/workflows" -type f 2>/dev/null
+}
+
+cmd_fix() {
+  local old="" new="$HOME" root="$HOME" dry=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --from) old="${2:?}"; shift 2 ;;
+      --to)   new="${2:?}"; shift 2 ;;
+      --root) root="${2:?}"; shift 2 ;;
+      -n|--dry-run) dry=1; shift ;;
+      -h|--help) usage; exit 0 ;;
+      *) die "невідома опція: $1" ;;
+    esac
+  done
+  old="${old%/}"; new="${new%/}"; root="${root%/}"
+
+  if [[ -z "$old" ]]; then
+    old=$(detect_old_home "$root") || true
+    if [[ -z "$old" ]]; then
+      info "старих шляхів не знайдено — схоже, все вже під поточним користувачем"
+      dim "якщо це не так, вкажи явно: --from /home/старий-юзер"
+      return 0
+    fi
+    info "старий home визначено як: $old"
+  fi
+  [[ "$old" != "$new" ]] || { info "шляхи збігаються ($old) — нічого робити"; return 0; }
+
+  info "$old  ->  $new"
+  local cfg="$root/.claude" changed=0
+
+  # 1. текстова заміна в конфігах
+  local files=() f
+  while IFS= read -r f; do
+    [[ -f "$f" ]] || continue
+    grep -qF "$old" "$f" 2>/dev/null && files+=("$f")
+  done < <(fix_targets "$root" | sort -u)
+
+  if [[ ${#files[@]} -gt 0 ]]; then
+    info "файли зі старими шляхами (${#files[@]}):"
+    for f in "${files[@]}"; do
+      printf '      %-58s %s входжень\n' "${f#$root/}" "$(grep -oF "$old" "$f" | wc -l | tr -d ' ')"
+    done
+    if [[ $dry -eq 0 ]]; then
+      for f in "${files[@]}"; do
+        cp "$f" "$f.bak-$TS"
+        OLD="$old" NEW="$new" perl -pi -e 's/\Q$ENV{OLD}\E/$ENV{NEW}/g' "$f"
+      done
+      changed=1
+    fi
+  else
+    dim "у конфігах старих шляхів не знайдено"
+  fi
+
+  # 2. симлінки в plugins/
+  local links=() l tgt
+  while IFS= read -r l; do
+    tgt=$(readlink "$l")
+    [[ "$tgt" == "$old"* ]] && links+=("$l")
+  done < <(find "$cfg/plugins" -type l 2>/dev/null || true)
+
+  if [[ ${#links[@]} -gt 0 ]]; then
+    info "симлінки (${#links[@]}):"
+    for l in "${links[@]}"; do
+      tgt=$(readlink "$l")
+      printf '      %s -> %s\n' "${l#$cfg/}" "$new${tgt#$old}"
+      if [[ $dry -eq 0 ]]; then
+        ln -sfn "$new${tgt#$old}" "$l"
+        [[ -e "$l" ]] || warn "  ціль не існує: $new${tgt#$old}"
+        changed=1
+      fi
+    done
+  fi
+
+  # 3. назви тек projects/ (шлях закодовано через дефіси)
+  local old_enc="${old//\//-}" new_enc="${new//\//-}" d base
+  if [[ -d "$cfg/projects" ]]; then
+    while IFS= read -r d; do
+      base=$(basename "$d")
+      [[ "$base" == "$old_enc"* ]] || continue
+      info "projects/: $base -> ${new_enc}${base#$old_enc}"
+      if [[ $dry -eq 0 ]]; then
+        mv "$d" "$cfg/projects/${new_enc}${base#$old_enc}"
+        changed=1
+      fi
+    done < <(find "$cfg/projects" -maxdepth 1 -mindepth 1 -type d 2>/dev/null || true)
+  fi
+
+  if [[ $dry -eq 1 ]]; then
+    dim "це був dry-run, нічого не змінено"
+  elif [[ $changed -eq 1 ]]; then
+    info "готово (резервні копії поруч: *.bak-$TS)"
+    dim "перевір: claude doctor && claude plugin list"
+  else
+    dim "нічого міняти не довелось"
+  fi
+}
+
+# ---------------------------------------------------------------- up
+
+cmd_up() {
+  local arch="" dest="$HOME" force=0 dry=0 nofix=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --dest) dest="${2:?}"; shift 2 ;;
+      -f|--force) force=1; shift ;;
+      --no-fix) nofix=1; shift ;;
+      -n|--dry-run) dry=1; shift ;;
+      -h|--help) usage; exit 0 ;;
+      -*) die "невідома опція: $1" ;;
+      *) arch="$1"; shift ;;
+    esac
+  done
+  [[ -n "$arch" ]] || arch=$(newest_archive)
+  [[ -f "$arch" ]] || die "немає такого файлу: $arch"
+  [[ -d "$dest" ]] || die "немає такої теки: $dest"
+  dest="${dest%/}"
+
+  info "архів: $arch"
+  dim "розпакувати в: $dest"
+
+  if [[ $dry -eq 1 ]]; then
+    info "вміст:"; tar tzf "$arch" | sed 's/^/    /'
+    return 0
+  fi
+
+  if [[ -e "$dest/.claude" && $force -eq 0 ]]; then
+    info "наявний конфіг відкладаю в $dest/.claude.pre-restore-$TS"
+    mv "$dest/.claude" "$dest/.claude.pre-restore-$TS"
+  fi
+  [[ -f "$dest/.claude.json" && $force -eq 0 ]] && \
+    cp "$dest/.claude.json" "$dest/.claude.json.pre-restore-$TS"
+
+  tar xzf "$arch" -C "$dest"
+  chmod 700 "$dest/.claude" 2>/dev/null || true
+  chmod 600 "$dest/.claude.json" 2>/dev/null || true
+  info "розпаковано"
+
+  if [[ $nofix -eq 0 ]]; then
+    local old
+    old=$(detect_old_home "$dest") || true
+    if [[ -n "$old" && "$old" != "$dest" ]]; then
+      echo
+      info "шляхи від старого користувача — переписую"
+      cmd_fix --from "$old" --to "$dest" --root "$dest"
+    fi
+  fi
+
+  echo
+  echo "Далі:"
+  echo "  1. claude              # потім /login"
+  echo "  2. /status             # які settings-файли підхопились"
+  echo "  3. claude doctor       # чи не відкинуто якісь ключі"
+  echo "  4. claude mcp list     # чи піднялись MCP-сервери"
+  echo "  5. claude plugin list  # чи на місці плагіни"
+  echo
+  dim "токени для MCP (\${SOME_TOKEN}) живуть у .zshrc/.bashrc — переноси окремо"
+}
+
+cmd_gc() {
+  local dry=0 yes=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -n|--dry-run) dry=1; shift ;;
+      -y|--yes) yes=1; shift ;;
+      -h|--help) usage; exit 0 ;;
+      *) die "невідома опція: $1" ;;
+    esac
+  done
+
+  local plug="$CONFIG_DIR/plugins"
+  [[ -d "$plug" ]] || { info "$plug немає — чистити нічого"; return 0; }
+
+  if pgrep -x claude >/dev/null 2>&1; then
+    warn "запущено Claude Code — закрий сесії, інакше можеш вибити активний плагін"
+    [[ $yes -eq 1 || $dry -eq 1 ]] || die "перервано"
+  fi
+
+  # dev-симлінки чіпати не можна: за ними твоя робоча копія
+  local links=() l
+  while IFS= read -r l; do links+=("$l"); done \
+    < <(find "$plug" -type l 2>/dev/null || true)
+  if [[ ${#links[@]} -gt 0 ]]; then
+    warn "у plugins/ є симлінки — вони будуть пропущені:"
+    for l in "${links[@]}"; do
+      printf '      %s -> %s\n' "${l#$plug/}" "$(readlink "$l")" >&2
+    done
+  fi
+
+  local victims=() m d t
+  while IFS= read -r m; do
+    d=$(dirname "$m")
+    [[ -L "$d" ]] && continue
+    victims+=("$d")
+  done < <(find "$plug/cache" -type f -name '.orphaned_at' 2>/dev/null || true)
+  while IFS= read -r t; do victims+=("$t"); done \
+    < <(find "$plug" -maxdepth 2 -type d -name 'temp_git_*' 2>/dev/null || true)
+
+  if [[ ${#victims[@]} -eq 0 ]]; then
+    info "нічого прибирати"
+  else
+    info "до видалення (${#victims[@]}):"
+    for d in "${victims[@]}"; do
+      printf '      %-58s %s\n' "${d#$CONFIG_DIR/}" "$(du -sh "$d" 2>/dev/null | cut -f1)"
+    done
+    local total
+    total=$(du -shc "${victims[@]}" 2>/dev/null | tail -1 | cut -f1)
+    info "разом: $total"
+
+    if [[ $dry -eq 1 ]]; then
+      dim "dry-run, нічого не видалено"
+    else
+      if [[ $yes -eq 0 ]]; then
+        printf 'Видалити? [y/N] '
+        local ans=""; read -r ans || true
+        [[ "$ans" == [yY]* ]] || { info "скасовано"; return 0; }
+      fi
+      rm -rf -- "${victims[@]}"
+      find "$plug/cache" -mindepth 1 -type d -empty -delete 2>/dev/null || true
+      info "видалено $total"
+    fi
+  fi
+
+  # дані плагінів, яких уже немає серед встановлених
+  if [[ -d "$plug/data" && -f "$plug/installed_plugins.json" ]]; then
+    local stale=() name_dir
+    while IFS= read -r name_dir; do
+      grep -qF "\"$(basename "$name_dir" | sed 's/-[^-]*$//')" "$plug/installed_plugins.json" 2>/dev/null \
+        || stale+=("$name_dir")
+    done < <(find "$plug/data" -maxdepth 1 -mindepth 1 -type d 2>/dev/null || true)
+    if [[ ${#stale[@]} -gt 0 ]]; then
+      warn "у plugins/data/ є теки без відповідного встановленого плагіна:"
+      for d in "${stale[@]}"; do
+        printf '      %-58s %s\n' "${d#$CONFIG_DIR/}" "$(du -sh "$d" 2>/dev/null | cut -f1)" >&2
+      done
+      dim "звір із 'claude plugin list' і прибери руками — там може бути потрібний стан"
+    fi
+  fi
+}
+
+cmd_ls() {
+  local arch="${1:-}"
+  [[ -n "$arch" ]] || arch=$(newest_archive)
+  [[ -f "$arch" ]] || die "немає такого файлу: $arch"
+  info "$arch"
+  tar tzf "$arch" | sed 's/^/    /'
+}
+
+case "${1:-}" in
+  tar)  shift; cmd_tar "$@" ;;
+  up)   shift; cmd_up  "$@" ;;
+  fix)  shift; cmd_fix "$@" ;;
+  gc)   shift; cmd_gc  "$@" ;;
+  ls)   shift; cmd_ls  "$@" ;;
+  -h|--help|help|"") usage ;;
+  *) die "невідома команда: $1 (дивись ./claude-bak --help)" ;;
+esac
