@@ -1,23 +1,181 @@
 #!/bin/bash
 
-# Shell setup script for Fedora
+# Shell setup for Fedora
 #
-# Installs Zsh, Starship and the zsh-users plugins, then points ~/.zshrc at the
-# shared config in shared/zsh.sh. The setup is distro specific, the config is not.
+# Installs zsh, starship, keychain and the zsh-users plugins, then materialises
+# the runtime config into ~/.shell and points ~/.zshrc at it.
+#
+# Run it straight off the internet, no clone needed:
+#
+#   curl -sS https://raw.githubusercontent.com/NuclleaR/dotenv/main/fedora/shell.sh | bash
+#
+# Piped, it downloads the files it needs into ~/.shell. Run from a clone, it
+# symlinks ~/.shell/<dir> at the repo instead, so editing a file in the repo
+# still applies to every new shell without re-running anything.
+#
+# The log helpers are inline rather than sourced from common/ because piped into
+# a shell there is no script path to resolve a sibling file from. Keep them in
+# step with common/logger.sh.
 
 set -euo pipefail
 
-# Get the directory where this script is located
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DOTENV_ROOT="$(dirname "$SCRIPT_DIR")"
+# Where the runtime config lives once installed
+SHELL_DIR="${SHELL_DIR:-$HOME/.shell}"
 
-# Source common utilities and logger
-source "$DOTENV_ROOT/common/logger.sh"
-source "$DOTENV_ROOT/common/utils.sh"
+# Where to fetch from when there is no clone to link against
+RAW_BASE="${DOTENV_RAW:-https://raw.githubusercontent.com/NuclleaR/dotenv/main}"
 
 # Zsh plugins are not packaged for Fedora, so they are cloned here
 # (manual install as documented by zsh-users)
 ZSH_PLUGINS_DIR="$HOME/.zsh"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Logging functions (mirror of common/logger.sh)
+log_info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+log_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+log_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+}
+
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Mirror of common/utils.sh
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+# Directories of the repo that hold runtime config, mirrored into ~/.shell
+RUNTIME_DIRS=(shared fedora)
+
+# The files inside them that the shell actually sources at startup.
+# shared/zsh.sh finds its siblings itself, but when downloading we have to know
+# the list up front — there is no directory listing over raw.githubusercontent.
+RUNTIME_FILES=(
+    shared/zsh.sh
+    shared/aliases.sh
+    shared/skim.sh
+    shared/starship.toml
+    fedora/aliases.sh
+)
+
+# Repo root when running from a clone, empty when piped into a shell
+REPO_ROOT=""
+
+# Work out whether we are running from a checkout. Piped, BASH_SOURCE[0] is
+# empty, so there is nothing to resolve and we fall back to downloading.
+detect_repo_root() {
+    local self dir
+
+    if [[ -z "${BASH_SOURCE[0]:-}" ]]; then
+        log_info "Running from a pipe — the runtime config will be downloaded"
+        return 0
+    fi
+
+    self="$(readlink -f "${BASH_SOURCE[0]}")"
+    dir="$(dirname "$(dirname "$self")")"
+
+    if [[ -f "$dir/shared/zsh.sh" ]]; then
+        REPO_ROOT="$dir"
+        log_info "Running from the repo at $REPO_ROOT — the runtime config will be symlinked"
+    else
+        log_info "Not inside a checkout — the runtime config will be downloaded"
+    fi
+}
+
+# Move whatever is currently at $1 out of the way, once, with a timestamp
+back_up_path() {
+    local TARGET="$1"
+    local BACKUP="$TARGET.backup.$(date +%Y%m%d-%H%M%S)"
+
+    mv "$TARGET" "$BACKUP"
+    log_warning "Existing $TARGET moved to $BACKUP"
+}
+
+# Point ~/.shell/<dir> at the repo, so repo edits apply with no further steps
+link_runtime_dir() {
+    local DIR="$1"
+    local SOURCE="$REPO_ROOT/$DIR"
+    local TARGET="$SHELL_DIR/$DIR"
+
+    if [[ ! -d "$SOURCE" ]]; then
+        log_warning "$SOURCE does not exist, skipping"
+        return 0
+    fi
+
+    if [[ -L "$TARGET" ]]; then
+        if [[ "$(readlink -f "$TARGET")" == "$(readlink -f "$SOURCE")" ]]; then
+            log_success "$TARGET already links to $SOURCE"
+            return 0
+        fi
+        rm -f "$TARGET"
+    elif [[ -e "$TARGET" ]]; then
+        back_up_path "$TARGET"
+    fi
+
+    ln -sfn "$SOURCE" "$TARGET"
+    log_success "$TARGET -> $SOURCE"
+}
+
+# Fetch one runtime file from GitHub into ~/.shell
+download_runtime_file() {
+    local REL="$1"
+    local TARGET="$SHELL_DIR/$REL"
+
+    mkdir -p "$(dirname "$TARGET")"
+
+    # A stale symlink from a previous clone-based run would be written through
+    [[ -L "$TARGET" ]] && rm -f "$TARGET"
+
+    log_info "Downloading $REL..."
+    if ! curl -fsSL "$RAW_BASE/$REL" -o "$TARGET.tmp"; then
+        log_error "Failed to download $RAW_BASE/$REL"
+        rm -f "$TARGET.tmp"
+        return 1
+    fi
+
+    mv "$TARGET.tmp" "$TARGET"
+    log_success "$REL"
+}
+
+# Put the runtime config under ~/.shell, by symlink or by download
+install_runtime_config() {
+    mkdir -p "$SHELL_DIR"
+
+    if [[ -n "$REPO_ROOT" ]]; then
+        local DIR
+        for DIR in "${RUNTIME_DIRS[@]}"; do
+            link_runtime_dir "$DIR"
+        done
+        return 0
+    fi
+
+    if ! command_exists curl; then
+        log_error "curl is needed to download the runtime config"
+        return 1
+    fi
+
+    log_warning "$SHELL_DIR is managed by this script — re-running overwrites it"
+    log_warning "Keep local changes in the repo, not in $SHELL_DIR"
+
+    local REL
+    for REL in "${RUNTIME_FILES[@]}"; do
+        download_runtime_file "$REL"
+    done
+}
 
 # Install Zsh if it is not present
 install_zsh() {
@@ -58,50 +216,6 @@ install_prerequisites() {
     log_success "Prerequisites installed"
 }
 
-# Install Starship prompt if it is not present and apply the dotenv config
-install_starship() {
-    if command_exists starship; then
-        log_success "Starship already installed"
-    else
-        log_info "Installing Starship from the official install script..."
-        if ! curl -sS https://starship.rs/install.sh | sh -s -- -y; then
-            log_error "Failed to install Starship"
-            return 1
-        fi
-        log_success "Starship installed"
-    fi
-
-    link_starship_config || log_warning "Starship config was not linked"
-    log_info "Starship version: $(starship --version)"
-}
-
-# Symlink the Starship config from the dotenv repo into ~/.config
-link_starship_config() {
-    local CONFIG_SOURCE="$DOTENV_ROOT/shared/starship.toml"
-    local CONFIG_TARGET="$HOME/.config/starship.toml"
-
-    if [[ ! -f "$CONFIG_SOURCE" ]]; then
-        log_warning "Starship config not found at $CONFIG_SOURCE"
-        return 1
-    fi
-
-    mkdir -p "$(dirname "$CONFIG_TARGET")"
-
-    if [[ -L "$CONFIG_TARGET" ]]; then
-        if [[ "$(readlink -f "$CONFIG_TARGET")" == "$(readlink -f "$CONFIG_SOURCE")" ]]; then
-            log_success "Starship config symlink already in place"
-            return 0
-        fi
-        log_warning "$CONFIG_TARGET points somewhere else, replacing..."
-    elif [[ -f "$CONFIG_TARGET" ]]; then
-        log_warning "$CONFIG_TARGET already exists (not a symlink), backing up..."
-        mv "$CONFIG_TARGET" "$CONFIG_TARGET.backup"
-    fi
-
-    ln -sf "$CONFIG_SOURCE" "$CONFIG_TARGET"
-    log_success "Starship config symlinked to $CONFIG_TARGET"
-}
-
 # Install keychain — it keeps a single ssh-agent per host that every terminal
 # reuses, which is what makes the SSH passphrase a once-per-boot question on a
 # remote box. shared/zsh.sh evaluates it at shell start.
@@ -119,6 +233,49 @@ install_keychain() {
     fi
 
     log_success "keychain installed"
+}
+
+# Install Starship prompt if it is not present and apply the dotenv config
+install_starship() {
+    if command_exists starship; then
+        log_success "Starship already installed"
+    else
+        log_info "Installing Starship from the official install script..."
+        if ! curl -sS https://starship.rs/install.sh | sh -s -- -y; then
+            log_error "Failed to install Starship"
+            return 1
+        fi
+        log_success "Starship installed"
+    fi
+
+    link_starship_config || log_warning "Starship config was not linked"
+    log_info "Starship version: $(starship --version)"
+}
+
+# Symlink the Starship config out of ~/.shell into ~/.config
+link_starship_config() {
+    local CONFIG_SOURCE="$SHELL_DIR/shared/starship.toml"
+    local CONFIG_TARGET="$HOME/.config/starship.toml"
+
+    if [[ ! -f "$CONFIG_SOURCE" ]]; then
+        log_warning "Starship config not found at $CONFIG_SOURCE"
+        return 1
+    fi
+
+    mkdir -p "$(dirname "$CONFIG_TARGET")"
+
+    if [[ -L "$CONFIG_TARGET" ]]; then
+        if [[ "$(readlink -f "$CONFIG_TARGET")" == "$(readlink -f "$CONFIG_SOURCE")" ]]; then
+            log_success "Starship config symlink already in place"
+            return 0
+        fi
+        log_warning "$CONFIG_TARGET points somewhere else, replacing..."
+    elif [[ -f "$CONFIG_TARGET" ]]; then
+        back_up_path "$CONFIG_TARGET"
+    fi
+
+    ln -sfn "$CONFIG_SOURCE" "$CONFIG_TARGET"
+    log_success "Starship config symlinked to $CONFIG_TARGET"
 }
 
 # Install zsh-users plugins from Git (they are not available via dnf)
@@ -148,18 +305,45 @@ clone_zsh_plugin() {
     log_success "$NAME installed"
 }
 
-# Add the Fedora specific aliases (dnf) to .zshrc.
-# They are distro specific, so they cannot live in the shared config.
+# Generate ~/.zshrc pointing at ~/.shell. Any existing file is backed up, never
+# appended to — the generated one holds nothing but the source line.
+setup_zshrc() {
+    local ZSHRC="$HOME/.zshrc"
+    local CONFIG="$SHELL_DIR/shared/zsh.sh"
+
+    if [[ ! -f "$CONFIG" ]]; then
+        log_error "$CONFIG is missing — the runtime config was not installed"
+        return 1
+    fi
+
+    if [[ -f "$ZSHRC" ]] && grep -qF "$CONFIG" "$ZSHRC"; then
+        log_success ".zshrc already sources $CONFIG"
+        return 0
+    fi
+
+    [[ -f "$ZSHRC" ]] && back_up_path "$ZSHRC"
+
+    cat > "$ZSHRC" <<EOF
+# Generated by the dotenv setup
+# The actual config lives in $SHELL_DIR — edit it there, not here
+source "$CONFIG"
+EOF
+
+    log_success "Created .zshrc sourcing $CONFIG"
+}
+
+# Append the Fedora specific aliases (dnf) to .zshrc, after setup_zshrc has
+# generated it — they are distro specific and cannot live in shared/.
 configure_dnf_aliases() {
     local ZSHRC="$HOME/.zshrc"
-    local ALIASES="$SCRIPT_DIR/aliases.sh"
+    local ALIASES="$SHELL_DIR/fedora/aliases.sh"
 
     if [[ ! -f "$ALIASES" ]]; then
         log_warning "Fedora aliases not found at $ALIASES"
         return 1
     fi
 
-    if [[ -f "$ZSHRC" ]] && grep -qF "fedora/aliases.sh" "$ZSHRC"; then
+    if [[ -f "$ZSHRC" ]] && grep -qF "$ALIASES" "$ZSHRC"; then
         log_success "Fedora aliases already sourced in .zshrc"
         return 0
     fi
@@ -192,22 +376,28 @@ show_default_shell_hint() {
 }
 
 main() {
+    detect_repo_root
+
     install_zsh
     install_prerequisites
-    install_starship
     install_keychain
+    install_runtime_config
+    install_starship
     install_zsh_plugins
     setup_zshrc
     configure_dnf_aliases
 
     echo ""
     log_success "Shell setup completed!"
+    log_info "Runtime config: $SHELL_DIR"
 
     echo ""
     show_default_shell_hint
 }
 
-# Run main only when executed directly, not when sourced
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+# Run main when executed directly or piped into a shell, but not when sourced.
+# Piped, BASH_SOURCE[0] is empty and $0 is the shell's name, so the plain
+# equality test used elsewhere in this repo would silently do nothing.
+if [[ -z "${BASH_SOURCE[0]:-}" || "${BASH_SOURCE[0]}" == "$0" ]]; then
     main "$@"
 fi

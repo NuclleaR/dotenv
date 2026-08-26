@@ -53,7 +53,39 @@ It installs rustup with `--no-modify-path`; `cargo` lands on `PATH` through `sha
 ./common/ssh.sh -n id_ed25519_work -H github-work
 ./common/gpg.sh                          # signing key + git commit.gpgsign
 ./fedora/postinstall.sh                  # firewalld -> ufw, fail2ban, fstrim, journal cap
+./fedora/apps.sh -a                      # podman, cli tools, rust, starship, mise, fonts
 ```
+
+### Without cloning
+
+All three Fedora scripts run straight off the internet, no clone needed:
+
+```bash
+RAW=https://raw.githubusercontent.com/NuclleaR/dotenv/main
+curl -sS $RAW/fedora/shell.sh       | bash
+curl -sS $RAW/fedora/postinstall.sh | bash
+curl -sS $RAW/fedora/apps.sh        | bash -s -- -a
+curl -sS $RAW/fedora/apps.sh        | bash -s -- -i rust -i cli
+```
+
+`bash`, not `sh` — they use arrays and `mapfile`.
+
+`postinstall.sh` and `apps.sh` only touch system packages and system config, so
+they need nothing else. `shell.sh` does need the runtime config, and gets it into
+`~/.shell` one of two ways:
+
+- **piped** — downloads `shared/{zsh,aliases,skim}.sh`, `shared/starship.toml`
+  and `fedora/aliases.sh` into `~/.shell/`. That directory is then *managed*: a
+  re-run overwrites it, so keep local changes in the repo.
+- **from a clone** — symlinks `~/.shell/shared` and `~/.shell/fedora` at the
+  repo instead, so editing a file in the repo still applies to every new shell
+  with nothing to re-run.
+
+Either way `~/.zshrc` sources `~/.shell/shared/zsh.sh` and
+`~/.config/starship.toml` links to `~/.shell/shared/starship.toml`.
+
+`common/ssh.sh` and `common/gpg.sh` still want the repo on disk — clone it as
+above.
 
 `common/ssh.sh` asks for the key passphrase interactively and never overwrites an
 existing key. It owns a marked block in `~/.ssh/config`, so hand-written host

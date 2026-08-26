@@ -68,6 +68,51 @@ Everything optional in `shared/` is guarded (`command -v <tool> >/dev/null`, `[[
 - **starship** — official install script; `shared/starship.toml` is **symlinked** to `~/.config/starship.toml`, so edits in the repo apply immediately.
 - **default shell** — the setup never runs `chsh`; it prints the `chsh` / `usermod` command and the log-out requirement instead.
 
+### Self-contained scripts (do not "fix" their duplicated logger)
+
+`fedora/shell.sh`, `fedora/postinstall.sh` and `fedora/apps.sh` are meant to be
+run straight off the internet, without a clone:
+
+```bash
+curl -sS https://raw.githubusercontent.com/NuclleaR/dotenv/main/fedora/apps.sh | bash -s -- -a
+```
+
+Two consequences that look like bugs but are deliberate:
+
+- They **define `log_*` and `command_exists` inline** instead of sourcing
+  `common/logger.sh`. Piped into a shell there is no script path to resolve a
+  sibling from, so a `source` would abort under `set -e`. Keep the inline copies
+  in step with `common/logger.sh`; do not replace them with a `source`.
+- Their run guard is `if [[ -z "${BASH_SOURCE[0]:-}" || "${BASH_SOURCE[0]}" == "$0" ]]`,
+  not the plain equality test the rest of the repo uses. Piped, `BASH_SOURCE[0]`
+  is empty and `$0` is the shell's name, so the plain test never fires and the
+  script silently does nothing at all.
+
+`common/ssh.sh` and `common/gpg.sh` still want the repo on disk and keep the
+normal `SCRIPT_DIR` + `source` form. All the pipeable ones need `bash`, not `sh`:
+they use arrays and `mapfile`.
+
+### The ~/.shell runtime directory (fedora)
+
+`fedora/shell.sh` does need the runtime config, so it materialises it into
+`$SHELL_DIR` (`~/.shell`) and points everything at that, never at the repo
+directly:
+
+- **piped** (`BASH_SOURCE[0]` empty) — downloads the files listed in
+  `RUNTIME_FILES` from `$DOTENV_RAW`. `~/.shell` is then *managed*: a re-run
+  overwrites it, and the script says so.
+- **from a clone** (`detect_repo_root` finds `shared/zsh.sh` one level up) —
+  symlinks `~/.shell/shared` and `~/.shell/fedora` at the repo. This is what
+  preserves the repo's live-edit property; do not "simplify" it into a copy.
+
+`RUNTIME_FILES` has to be maintained by hand: there is no directory listing over
+raw.githubusercontent, so a new file sourced from `shared/zsh.sh` must be added
+there or the piped install will be missing it.
+
+`fedora/shell.sh` therefore has its own `setup_zshrc` rather than using the one
+in `common/utils.sh` — the latter points `~/.zshrc` straight at the repo and is
+still what `openSUSE/shell.sh` uses. The two are deliberately different.
+
 ### SSH / GPG / firewall invariants
 
 - `common/ssh.sh` owns a block in `~/.ssh/config` delimited by `# >>> dotenv managed >>>` / `# <<< dotenv managed <<<`. Everything outside the markers is preserved; the block is *replaced*, never appended twice.
