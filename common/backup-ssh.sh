@@ -5,34 +5,16 @@
 
 set -euo pipefail
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Logging functions
-log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
-}
-
-log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
-}
-
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
-
-log_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
-}
+# Source common logger
+source "$SCRIPT_DIR/logger.sh"
 
 # Check if gh is installed
 if ! command -v gh &> /dev/null; then
     log_error "GitHub CLI (gh) is not installed"
-    log_info "Install it with: ./bootstrap.sh -i gh"
+    log_info "Install it with your distro's bootstrap script, e.g. ./ubuntu/bootstrap.sh -i gh"
     exit 1
 fi
 

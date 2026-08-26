@@ -36,6 +36,23 @@ export GITHUB_USERNAME=NuclleaR
 
 export RIP_GRAVEYARD=~/.local/share/Trash
 
+# keychain keeps one ssh-agent per host, shared by every terminal, so on a
+# remote box the passphrase is asked by the first session after a boot and by
+# none of the ones after it. Interactive shells only — a non-interactive one
+# (scp, rsync, cron) must never block on a passphrase prompt.
+if [[ -o interactive ]] && command -v keychain >/dev/null; then
+    _kc_keys=("$HOME"/.ssh/id_*(N))
+    _kc_keys=(${_kc_keys:#*.pub})
+    (( $#_kc_keys )) && eval "$(keychain --eval --quiet "${_kc_keys[@]}")"
+    unset _kc_keys
+fi
+
+# gpg has to know which terminal to ask for the signing passphrase on,
+# otherwise signing fails with "Inappropriate ioctl for device".
+# Only exported when there really is a terminal — an empty GPG_TTY is worse
+# than an unset one, gpg would try to write the prompt to it.
+[[ -t 0 ]] && export GPG_TTY="${TTY:-$(tty)}"
+
 # Directory of this file, so the other shared configs can be sourced next to it
 SHARED_DIR="${${(%):-%x}:A:h}"
 

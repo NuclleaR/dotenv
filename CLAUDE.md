@@ -30,19 +30,19 @@ HOME="$SB" bash -c 'source …; command_exists() { [[ "$1" != curl ]]; }; instal
 HOME="$SB" bash -c 'source …; getent() { echo "u:x:1000:1000::/home/u:/bin/bash"; }; show_default_shell_hint'
 ```
 
-Entry points that can be executed directly: `./openSUSE/shell.sh`, `./common/rust.sh`, `./arch/drivers.sh`, `./arch/zram.sh <setup|disable|stats>`, `./kde/keyboard.sh`. `./arch.sh` and `./ubuntu/bootstrap.sh` are flag dispatchers — run them with `-h` for the list of installable names. Both take `-i <name>` (install one thing), `-a` (everything) and `-v` (print versions); arch additionally has `-u` for a system update, while ubuntu spells that `-i upd`.
+Entry points that can be executed directly: `./openSUSE/shell.sh`, `./fedora/shell.sh`, `./fedora/postinstall.sh`, `./common/rust.sh`, `./common/ssh.sh`, `./common/gpg.sh`, `./arch/drivers.sh`, `./arch/zram.sh <setup|disable|stats>`, `./kde/keyboard.sh`. `./arch.sh` and `./ubuntu/bootstrap.sh` are flag dispatchers — run them with `-h` for the list of installable names. Both take `-i <name>` (install one thing), `-a` (everything) and `-v` (print versions); arch additionally has `-u` for a system update, while ubuntu spells that `-i upd`.
 
 ## Architecture
 
 Three layers; picking the right one is the main decision for any change.
 
-- **`common/`** — distribution-independent *setup* functions, sourced by distro scripts. `logger.sh` (`log_info` / `log_success` / `log_warning` / `log_error`), `utils.sh` (`command_exists`, `setup_zshrc`, `install_cargo_app`), `git_conf.sh`, `rust.sh`. No package manager may appear here.
+- **`common/`** — distribution-independent *setup* functions, sourced by distro scripts. `logger.sh` (`log_info` / `log_success` / `log_warning` / `log_error`), `utils.sh` (`command_exists`, `setup_zshrc`, `install_cargo_app`), `git_conf.sh`, `rust.sh`, `ssh.sh`, `gpg.sh`, `backup-ssh.sh`, `restore-ssh.sh`. No package manager may appear here — `common/ssh.sh` only *checks* for `keychain`/`gh` and tells you which distro script installs them.
 - **`shared/`** — the *runtime* zsh config, sourced from `~/.zshrc` at shell startup. `shared/zsh.sh` is the entry point: it derives `SHARED_DIR` from its own path (`${${(%):-%x}:A:h}`), sources its siblings (`aliases.sh`, `skim.sh`), then starship/zoxide init, then the plugins.
-- **`<distro>/`** — only what differs per distribution: package installation, and wiring of distro-only config (`openSUSE/aliases.sh` holds the zypper aliases).
+- **`<distro>/`** — only what differs per distribution: package installation, and wiring of distro-only config (`openSUSE/aliases.sh` holds the zypper aliases, `fedora/aliases.sh` the dnf ones).
 
 Setup is not config: setup differs per distribution and lives in `common/` + `<distro>/`; config is shared and lives in `shared/`. Do not put installer logic in `shared/` or shell runtime config in `common/`.
 
-Two generations coexist. `openSUSE/` is the current pattern (thin distro script delegating to `common/` and `shared/`). `fedora/bootstrap.sh` and `macos/bootstrap.sh` are older self-contained monoliths that define their own `log_*` helpers; `arch/` and `ubuntu/modules/` sit in between, with per-distro copies of the same CLI-tool installers. Leave the older ones alone unless asked to touch them.
+Two generations coexist. `openSUSE/shell.sh` and `fedora/shell.sh` are the current pattern (thin distro script delegating to `common/` and `shared/`) — they are the same file bar the package manager. `fedora/bootstrap.sh` and `macos/bootstrap.sh` are older self-contained monoliths that define their own `log_*` helpers; `arch/` and `ubuntu/modules/` sit in between, with per-distro copies of the same CLI-tool installers. Leave the older ones alone unless asked to touch them.
 
 ### The ~/.zshrc contract
 
@@ -67,3 +67,11 @@ Everything optional in `shared/` is guarded (`command -v <tool> >/dev/null`, `[[
 - **rustup** — installed with `--no-modify-path`; PATH comes from `shared/zsh.sh` sourcing `~/.cargo/env`, so nothing patches `.profile`/`.bashrc` behind your back. Consequence: a plain bash session that never sourced the zsh config will not find `cargo`, so setup helpers that need it source `~/.cargo/env` themselves first.
 - **starship** — official install script; `shared/starship.toml` is **symlinked** to `~/.config/starship.toml`, so edits in the repo apply immediately.
 - **default shell** — the setup never runs `chsh`; it prints the `chsh` / `usermod` command and the log-out requirement instead.
+
+### SSH / GPG / firewall invariants
+
+- `common/ssh.sh` owns a block in `~/.ssh/config` delimited by `# >>> dotenv managed >>>` / `# <<< dotenv managed <<<`. Everything outside the markers is preserved; the block is *replaced*, never appended twice.
+- `ssh-keygen -F <host>` **must** be called with `-f <known_hosts>`. Without it ssh-keygen resolves the path from the passwd entry rather than `$HOME`, so the check reads a different file than the script writes and the seeding stops being idempotent.
+- Agent strategy is `keychain`, not a systemd user unit: one agent per host shared by every terminal, evaluated from `shared/zsh.sh` for **interactive shells only** (a non-interactive zsh must never block on a passphrase prompt). `gpg-agent` needs no equivalent — it is already one daemon per user; `common/gpg.sh` only sets its cache TTL.
+- `GPG_TTY` is exported only when a terminal exists. An empty `GPG_TTY` is worse than an unset one — gpg tries to write the prompt into it.
+- `fedora/postinstall.sh` assumes a headless box reached over SSH. The sshd port is detected and allowed *before* `ufw enable`, and the function refuses to enable ufw when that rule is missing from `ufw show added`. Keep that guard. firewalld is stopped/disabled/masked; the package is removed only when `dnf repoquery --whatrequires` comes back empty.

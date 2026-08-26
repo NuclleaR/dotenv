@@ -8,12 +8,13 @@ Covered: openSUSE, Arch, Ubuntu/Pop!\_OS, Fedora, macOS.
 
 | Path | What it is |
 | --- | --- |
-| `common/` | Distribution-independent **setup** functions: `logger.sh`, `utils.sh` (`command_exists`, `setup_zshrc`, `install_cargo_app`), `git_conf.sh`, `rust.sh` |
+| `common/` | Distribution-independent **setup** functions: `logger.sh`, `utils.sh` (`command_exists`, `setup_zshrc`, `install_cargo_app`), `git_conf.sh`, `rust.sh`, `ssh.sh`, `gpg.sh`, plus the `backup-ssh.sh` / `restore-ssh.sh` helpers |
 | `shared/` | The **runtime** zsh config, sourced from `~/.zshrc`: `zsh.sh` (entry point), `aliases.sh`, `skim.sh`, `starship.toml` |
 | `openSUSE/` | zypper installs and zypper aliases |
 | `arch/`, `arch.sh` | Arch bootstrap with per-topic modules (drivers, zram, packages, cli tools) |
-| `ubuntu/` | Ubuntu/Pop!\_OS bootstrap with `modules/`, plus SSH backup/restore helpers |
-| `fedora/`, `macos/` | Older self-contained bootstrap scripts |
+| `ubuntu/` | Ubuntu/Pop!\_OS bootstrap with `modules/` |
+| `fedora/` | `shell.sh` and `postinstall.sh` follow the current pattern; `bootstrap.sh` is an older self-contained script |
+| `macos/` | Older self-contained bootstrap script |
 | `git/` | Global gitignore, symlinked by `common/git_conf.sh` |
 | `kde/`, `kde_shell.sh` | KDE keyboard remapping and config backup |
 | `keyd/` | keyd keymap (`default.conf`) |
@@ -45,6 +46,27 @@ Rust is separate:
 
 It installs rustup with `--no-modify-path`; `cargo` lands on `PATH` through `shared/zsh.sh`, which sources `~/.cargo/env`.
 
+## SSH, GPG and the remote box
+
+```bash
+./common/ssh.sh                          # ed25519 key, keychain, ~/.ssh/config, GitHub
+./common/ssh.sh -n id_ed25519_work -H github-work
+./common/gpg.sh                          # signing key + git commit.gpgsign
+./fedora/postinstall.sh                  # firewalld -> ufw, fail2ban, fstrim, journal cap
+```
+
+`common/ssh.sh` asks for the key passphrase interactively and never overwrites an
+existing key. It owns a marked block in `~/.ssh/config`, so hand-written host
+entries around it survive. `keychain` (installed by `fedora/shell.sh`) keeps one
+ssh-agent per host, so on a machine you reach from many terminals the passphrase
+is asked by the first session after a boot and by none of the ones after it.
+
+`fedora/postinstall.sh` is written for a headless box reached over SSH: it
+detects the port sshd actually listens on and allows it *before* ufw is ever
+enabled, refuses to enable ufw if that rule is missing, and puts the Tailscale
+range in fail2ban's `ignoreip`. firewalld is stopped, disabled and masked; the
+package is only removed when nothing else depends on it.
+
 ## Other machines
 
 ```bash
@@ -54,7 +76,7 @@ It installs rustup with `--no-modify-path`; `cargo` lands on `PATH` through `sha
 ./macos/bootstrap.sh
 ```
 
-Standalone helpers: `./arch/drivers.sh`, `./arch/zram.sh <setup|disable|stats>`, `./kde/keyboard.sh`, `./kde_shell.sh` (backs up KDE config to `~/.kde_backups`).
+Standalone helpers: `./common/ssh.sh`, `./common/gpg.sh`, `./arch/drivers.sh`, `./arch/zram.sh <setup|disable|stats>`, `./kde/keyboard.sh`, `./kde_shell.sh` (backs up KDE config to `~/.kde_backups`).
 
 > The older scripts (`arch.sh`, `ubuntu/bootstrap.sh`, `arch/zram.sh`, `kde/keyboard.sh`) still hardcode `$HOME/dev/dotenv` as the repo location; the newer ones resolve their own path and work from anywhere.
 
