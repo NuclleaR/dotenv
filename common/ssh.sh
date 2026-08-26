@@ -2,9 +2,10 @@
 
 # SSH setup: key generation, agent, client config and GitHub wiring.
 #
-# Distribution independent — only ssh-keygen, ssh-add and systemd --user are
-# used, so this works the same on Fedora, openSUSE and Arch. The passphrase is
-# always asked for interactively; it is never taken from a file or an argument.
+# Distribution independent: only ssh-keygen, ssh-add, ssh-keyscan and optionally
+# keychain are used, and nothing is ever installed from here, so it runs the
+# same anywhere. The passphrase is always asked for interactively; it is never
+# taken from a file or an argument.
 
 set -euo pipefail
 
@@ -140,26 +141,55 @@ generate_ssh_key() {
     log_info "Fingerprint: $(ssh-keygen -lf "$KEY_PATH.pub")"
 }
 
-# keychain keeps a single ssh-agent per host, so every terminal you open — and
-# on a remote box that is many — reuses the same one and the passphrase is asked
-# once per boot. The agent is picked up at shell start by shared/zsh.sh; this
-# starts it now and loads the key, so the very next session is already unlocked.
-setup_keychain() {
-    if ! command_exists keychain; then
-        log_warning "keychain not installed — install it with the distro shell script (Fedora: ./fedora/shell.sh)"
-        log_info "Without it every shell starts its own agent: ssh-add ~/.ssh/$KEY_NAME"
+# Load the key into an agent.
+#
+# keychain, when it is there, keeps one agent per host that every terminal
+# reuses, so the passphrase is asked once per boot instead of once per session —
+# which is what you want on a box you reach from many terminals. It is an
+# optimisation, not a requirement: this script lives in common/ and has to run on
+# any distribution, so it never installs anything and falls back to the plain
+# agent. Install keychain from the distro app script if you want the nicer path.
+setup_agent() {
+    local KEY_PATH="$SSH_DIR/$KEY_NAME"
+
+    # Already in the agent? Then a re-run must not ask for the passphrase again.
+    if [[ -f "$KEY_PATH.pub" ]]; then
+        local FPR
+        FPR="$(ssh-keygen -lf "$KEY_PATH.pub" 2>/dev/null | awk '{print $2}')"
+        if [[ -n "$FPR" ]] && ssh-add -l 2>/dev/null | grep -qF "$FPR"; then
+            log_success "$KEY_NAME is already loaded in the agent"
+            return 0
+        fi
+    fi
+
+    if command_exists keychain; then
+        log_info "Loading $KEY_NAME into keychain (passphrase prompt follows)..."
+        if keychain --quiet "$KEY_PATH"; then
+            log_success "Key loaded — every new shell reuses this agent"
+        else
+            log_warning "keychain failed — load the key later with: keychain ~/.ssh/$KEY_NAME"
+        fi
+
+        log_info "If logind kills user processes at logout, keep the agent alive with:"
+        log_info "    sudo loginctl enable-linger ${USER:-$(id -un)}"
         return 0
     fi
 
-    log_info "Loading $KEY_NAME into keychain (passphrase prompt follows)..."
-    if keychain --quiet "$SSH_DIR/$KEY_NAME"; then
-        log_success "Key loaded — every new shell reuses this agent"
-    else
-        log_warning "keychain failed — load the key later with: keychain ~/.ssh/$KEY_NAME"
+    log_info "keychain is not installed, using the plain ssh-agent"
+
+    if [[ -z "${SSH_AUTH_SOCK:-}" ]]; then
+        log_warning "No agent is running in this session"
+        log_info "Start one and add the key with:"
+        log_info "    eval \"\$(ssh-agent -s)\" && ssh-add ~/.ssh/$KEY_NAME"
+        return 0
     fi
 
-    log_info "If logind kills user processes at logout, keep the agent alive with:"
-    log_info "    sudo loginctl enable-linger ${USER:-$(id -un)}"
+    log_info "Adding $KEY_NAME to the running agent (passphrase prompt follows)..."
+    if ssh-add "$KEY_PATH"; then
+        log_success "Key added to the running agent"
+    else
+        log_warning "ssh-add failed — add it later with: ssh-add ~/.ssh/$KEY_NAME"
+    fi
 }
 
 # Write the dotenv block into ~/.ssh/config. Everything outside the markers is
@@ -192,6 +222,18 @@ EOF
     fi
 
     if grep -qF "$CONFIG_BEGIN" "$CONFIG"; then
+        # A re-run must not churn the file or drop another backup next to it,
+        # so compare what is there with what we would write first
+        local CURRENT
+        CURRENT="$(awk -v b="$CONFIG_BEGIN" -v e="$CONFIG_END" \
+            '$0 == b { f = 1 } f { print } $0 == e { f = 0 }' "$CONFIG")"
+
+        if [[ "$CURRENT" == "$BLOCK" ]]; then
+            chmod 600 "$CONFIG"
+            log_success "$CONFIG already up to date"
+            return 0
+        fi
+
         log_info "Replacing the dotenv block in $CONFIG..."
         local BACKUP="$CONFIG.backup.$(date +%Y%m%d-%H%M%S)"
         cp "$CONFIG" "$BACKUP"
@@ -290,7 +332,7 @@ main() {
 
     ensure_ssh_dir
     generate_ssh_key
-    setup_keychain
+    setup_agent
     configure_ssh_config
     seed_known_hosts
     upload_key_to_github

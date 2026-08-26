@@ -118,11 +118,18 @@ restore_firewalld() {
         sudo systemctl unmask firewalld
     fi
 
-    log_info "Enabling firewalld..."
     sudo systemctl enable firewalld >/dev/null 2>&1 || true
-    if ! sudo systemctl restart firewalld; then
-        log_error "firewalld failed to start — check: sudo journalctl -u firewalld -n 30"
-        return 1
+
+    # Start it only when it is down. Bouncing a running firewall on every re-run
+    # is needless churn on a box we are logged into.
+    if systemctl is-active --quiet firewalld; then
+        log_success "firewalld already running"
+    else
+        log_info "Starting firewalld..."
+        if ! sudo systemctl start firewalld; then
+            log_error "firewalld failed to start — check: sudo journalctl -u firewalld -n 30"
+            return 1
+        fi
     fi
 
     log_success "firewalld enabled ($(sudo firewall-cmd --state 2>/dev/null || echo unknown))"
@@ -134,27 +141,51 @@ configure_firewalld() {
     ZONE="$(sudo firewall-cmd --get-default-zone 2>/dev/null || echo public)"
     log_info "Default zone: $ZONE"
 
-    log_info "Allowing the ssh service in $ZONE..."
-    sudo firewall-cmd --permanent --zone="$ZONE" --add-service=ssh >/dev/null
+    # Every --add-* below is asked about first: firewall-cmd warns and returns
+    # non-zero flavours of "already there" otherwise, and under set -e a re-run
+    # would abort the script instead of being a no-op.
+    local CHANGED=false
+
+    if sudo firewall-cmd --permanent --zone="$ZONE" --query-service=ssh >/dev/null 2>&1; then
+        log_success "ssh service already allowed in $ZONE"
+    else
+        log_info "Allowing the ssh service in $ZONE..."
+        sudo firewall-cmd --permanent --zone="$ZONE" --add-service=ssh >/dev/null
+        CHANGED=true
+    fi
 
     # A non-standard sshd port is not covered by the ssh service definition
     local PORT
     for PORT in "${SSH_PORTS[@]}"; do
-        if [[ "$PORT" != "22" ]]; then
+        [[ "$PORT" == "22" ]] && continue
+
+        if sudo firewall-cmd --permanent --zone="$ZONE" --query-port="$PORT/tcp" >/dev/null 2>&1; then
+            log_success "port $PORT/tcp already allowed in $ZONE"
+        else
             log_info "Allowing the non-standard sshd port $PORT/tcp..."
             sudo firewall-cmd --permanent --zone="$ZONE" --add-port="$PORT/tcp" >/dev/null
+            CHANGED=true
         fi
     done
 
     if ip link show "$TAILSCALE_IFACE" >/dev/null 2>&1; then
-        log_info "Moving $TAILSCALE_IFACE into the trusted zone..."
-        sudo firewall-cmd --permanent --zone=trusted --change-interface="$TAILSCALE_IFACE" >/dev/null
+        if sudo firewall-cmd --permanent --zone=trusted --query-interface="$TAILSCALE_IFACE" >/dev/null 2>&1; then
+            log_success "$TAILSCALE_IFACE already in the trusted zone"
+        else
+            log_info "Moving $TAILSCALE_IFACE into the trusted zone..."
+            sudo firewall-cmd --permanent --zone=trusted --change-interface="$TAILSCALE_IFACE" >/dev/null
+            CHANGED=true
+        fi
     else
         log_warning "$TAILSCALE_IFACE does not exist — re-run this after Tailscale is up to trust it"
     fi
 
-    sudo firewall-cmd --reload >/dev/null
-    log_success "firewalld configured"
+    if [[ "$CHANGED" == true ]]; then
+        sudo firewall-cmd --reload >/dev/null
+        log_success "firewalld configured"
+    else
+        log_success "firewalld already configured, nothing to reload"
+    fi
 }
 
 # Undo the ufw setup an earlier version of this script may have applied
