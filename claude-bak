@@ -3,9 +3,14 @@
 # claude-bak — бекап і перенесення конфігу Claude Code між машинами.
 #
 #   ./claude-bak tar [-o ФАЙЛ] [--with-memory] [--with-credentials]
-#   ./claude-bak up  [АРХІВ] [--dest ТЕКА] [--force] [--no-fix]
+#   ./claude-bak up  [АРХІВ] [--dest ТЕКА] [-y] [--force] [--no-fix]
 #   ./claude-bak fix [--from СТАРИЙ_HOME] [--to НОВИЙ_HOME] [-n]
 #   ./claude-bak ls  [АРХІВ]
+#
+# Без клону репо — те саме через curl (саме bash, не sh: тут масиви):
+#
+#   curl -sS https://raw.githubusercontent.com/NuclleaR/dotenv/main/claude-bak | bash -s -- tar
+#   curl -sS https://raw.githubusercontent.com/NuclleaR/dotenv/main/claude-bak | bash -s -- up
 #
 set -euo pipefail
 
@@ -13,11 +18,33 @@ CONFIG_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 STATE_FILE="$HOME/.claude.json"
 TS="$(date +%Y%m%d-%H%M%S)"
 
+RAW_BASE="${DOTENV_RAW:-https://raw.githubusercontent.com/NuclleaR/dotenv/main}"
+
+# Під curl | bash файла на диску немає, тож підказки мусять називати ту команду,
+# якою скрипт насправді запустили, а не неіснуючий ./claude-bak.
+if [[ -n "${BASH_SOURCE[0]:-}" ]]; then
+  SELF="$0"
+else
+  SELF="curl -sS $RAW_BASE/claude-bak | bash -s --"
+fi
+
 c_red=$'\033[31m'; c_yel=$'\033[33m'; c_grn=$'\033[32m'; c_dim=$'\033[2m'; c_off=$'\033[0m'
 info() { printf '%s==>%s %s\n' "$c_grn" "$c_off" "$*"; }
 warn() { printf '%s!!!%s %s\n' "$c_yel" "$c_off" "$*" >&2; }
 die()  { printf '%sxxx%s %s\n' "$c_red" "$c_off" "$*" >&2; exit 1; }
 dim()  { printf '%s    %s%s\n' "$c_dim" "$*" "$c_off"; }
+
+# stdin може бути пайпом (curl | bash), тому питаємо термінал напряму.
+# Перевіряємо саме що /dev/tty відкривається, а не що нода існує: без
+# керуючого термінала файл на місці, а редирект падає сирою помилкою шелу.
+have_tty() { { : < /dev/tty; } 2>/dev/null; }
+
+confirm() {
+  local ans=""
+  have_tty || die "немає термінала для підтвердження — перезапусти з -y"
+  read -rp "$1 [y/N] " ans < /dev/tty || true
+  [[ "$ans" == [yY]* ]]
+}
 
 JUNK=(
   projects file-history shell-snapshots paste-cache image-cache uploads
@@ -53,6 +80,7 @@ up [АРХІВ] [опції]
       --dest ТЕКА         куди розпакувати (типово $HOME)
   -f, --force             не робити резервну копію наявного конфігу
       --no-fix            не переписувати шляхи автоматично
+  -y, --yes               не питати підтвердження
   -n, --dry-run           показати план
 
 gc [опції]
@@ -67,6 +95,10 @@ fix [опції]
 ПРИКЛАД
   стара машина:  ./claude-bak tar
   нова машина:   ./claude-bak up claude-backup-20260824-101500.tar.gz
+
+БЕЗ КЛОНУ РЕПО (bash, не sh)
+  curl -sS https://raw.githubusercontent.com/NuclleaR/dotenv/main/claude-bak | bash -s -- tar
+  curl -sS https://raw.githubusercontent.com/NuclleaR/dotenv/main/claude-bak | bash -s -- up
 USAGE
 }
 
@@ -122,7 +154,7 @@ cmd_tar() {
     args+=(--exclude="$name/${d#$CONFIG_DIR/}")
   done < <(find "$CONFIG_DIR/plugins/cache" -type f -name '.orphaned_at' 2>/dev/null || true)
   if [[ ${#orphans[@]} -gt 0 ]]; then
-    dim "пропускаю осиротілих версій плагінів: ${#orphans[@]} (./claude-bak gc — щоб видалити з диска)"
+    dim "пропускаю осиротілих версій плагінів: ${#orphans[@]} ($SELF gc — щоб видалити з диска)"
   fi
 
   # попередження про dev-симлінки в кеші плагінів
@@ -153,7 +185,7 @@ cmd_tar() {
   chmod 600 "$out"
 
   info "готово: $out ($(du -h "$out" | cut -f1))"
-  dim "старий home: $HOME  (знадобиться для ./claude-bak fix)"
+  dim "старий home: $HOME  (знадобиться для: $SELF fix)"
   if [[ $with_creds -eq 1 ]]; then
     warn "в архіві є .credentials.json — не клади його в git"
   else
@@ -163,6 +195,13 @@ cmd_tar() {
 
 # ---------------------------------------------------------------- fix
 
+# Найчастіший /home/<юзер> у потоці на stdin. Той самий пошук потрібен двічі:
+# по вже розпакованому дереву і по архіву, який ще не чіпали.
+scan_homes() {
+  grep -aoE '/(home|Users)/[A-Za-z0-9._-]+' \
+    | sort | uniq -c | sort -rn | head -n1 | awk '{print $2}' || true
+}
+
 detect_old_home() {
   local root="$1"
   {
@@ -171,9 +210,19 @@ detect_old_home() {
     find "$root/.claude/plugins" -maxdepth 2 -name '*.json' -type f -exec cat {} + 2>/dev/null
     find "$root/.claude/plugins" -type l -exec readlink {} + 2>/dev/null
     ls -1 "$root/.claude/projects" 2>/dev/null | tr '-' '/'
-  } 2>/dev/null \
-    | grep -oE '/(home|Users)/[A-Za-z0-9._-]+' \
-    | sort | uniq -c | sort -rn | head -n1 | awk '{print $2}' || true
+  } 2>/dev/null | scan_homes
+}
+
+# Те саме, але по архіву — щоб спитати про рестор ДО того, як щось розпаковано.
+# Три джерела: вміст файлів, цілі симлінків із лістингу і назви тек projects/,
+# де шлях закодовано через дефіси (-home-user-dev -> /home/user/dev).
+detect_archive_home() {
+  local arch="$1"
+  {
+    tar xzOf "$arch"
+    tar tzvf "$arch" | sed -n 's/.* -> //p'
+    tar tzf "$arch" | tr '-' '/'
+  } 2>/dev/null | scan_homes
 }
 
 fix_targets() {
@@ -283,12 +332,13 @@ cmd_fix() {
 # ---------------------------------------------------------------- up
 
 cmd_up() {
-  local arch="" dest="$HOME" force=0 dry=0 nofix=0
+  local arch="" dest="$HOME" force=0 dry=0 nofix=0 yes=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --dest) dest="${2:?}"; shift 2 ;;
       -f|--force) force=1; shift ;;
       --no-fix) nofix=1; shift ;;
+      -y|--yes) yes=1; shift ;;
       -n|--dry-run) dry=1; shift ;;
       -h|--help) usage; exit 0 ;;
       -*) die "невідома опція: $1" ;;
@@ -300,13 +350,60 @@ cmd_up() {
   [[ -d "$dest" ]] || die "немає такої теки: $dest"
   dest="${dest%/}"
 
-  info "архів: $arch"
-  dim "розпакувати в: $dest"
-
   if [[ $dry -eq 1 ]]; then
+    local peek=""
+    peek=$(detect_archive_home "$arch") || true
+    info "архів: $arch"
+    dim "розпакувати в: $dest"
+    [[ -n "$peek" ]] && dim "з-під користувача: $(basename "$peek")  ($peek)"
     info "вміст:"; tar tzf "$arch" | sed 's/^/    /'
     return 0
   fi
+
+  # З-під кого зроблено архів — з'ясовуємо ДО того, як щось чіпати на диску:
+  # питати «переписати /home/старий -> /home/новий?» має сенс тільки поки
+  # ще нічого не розпаковано і від питання можна відмовитись.
+  local old=""
+  [[ $nofix -eq 1 ]] || old=$(detect_archive_home "$arch") || true
+
+  info "архів:   $arch  ($(du -h "$arch" | cut -f1))"
+  info "сюди:    $(basename "$dest")  ($dest)"
+  if [[ $nofix -eq 1 ]]; then
+    dim "шляхи:   не чіпаю (--no-fix)"
+  elif [[ -n "$old" ]]; then
+    info "з-під:   $(basename "$old")  ($old)"
+  else
+    warn "не видно, з-під якого користувача зроблено архів"
+    if [[ $yes -eq 0 ]] && have_tty; then
+      local ans=""
+      read -rp "    старий home (напр. /home/serhii), Enter — не переписувати: " ans < /dev/tty || true
+      old="${ans%/}"
+    fi
+    # Порожня відповідь — це відмова, а не «спробуй ще раз після розпакування»
+    [[ -n "$old" ]] || { nofix=1; dim "шляхи:   не чіпаю"; }
+  fi
+
+  echo
+  info "буде зроблено:"
+  if [[ -e "$dest/.claude" ]]; then
+    if [[ $force -eq 1 ]]; then
+      dim "розпакувати поверх наявного $dest/.claude, без резервної копії (--force)"
+    else
+      dim "наявний $dest/.claude  ->  .claude.pre-restore-$TS"
+    fi
+  fi
+  [[ -f "$dest/.claude.json" && $force -eq 0 ]] && \
+    dim "наявний $dest/.claude.json  ->  .claude.json.pre-restore-$TS"
+  dim "розпакувати $arch у $dest"
+  if [[ $nofix -eq 0 && -n "$old" && "$old" != "$dest" ]]; then
+    dim "переписати $old -> $dest у конфігах, симлінках і назвах projects/"
+  fi
+
+  if [[ $yes -eq 0 ]]; then
+    echo
+    confirm "Робити рестор?" || { info "скасовано"; return 0; }
+  fi
+  echo
 
   if [[ -e "$dest/.claude" && $force -eq 0 ]]; then
     info "наявний конфіг відкладаю в $dest/.claude.pre-restore-$TS"
@@ -320,14 +417,13 @@ cmd_up() {
   chmod 600 "$dest/.claude.json" 2>/dev/null || true
   info "розпаковано"
 
-  if [[ $nofix -eq 0 ]]; then
-    local old
-    old=$(detect_old_home "$dest") || true
-    if [[ -n "$old" && "$old" != "$dest" ]]; then
-      echo
-      info "шляхи від старого користувача — переписую"
-      cmd_fix --from "$old" --to "$dest" --root "$dest"
-    fi
+  # $old тут або визначено з архіву, або введено руками, або nofix=1 —
+  # після розпакування шукати вже нічого, detect_archive_home бачить строго
+  # більше за detect_old_home по дереву.
+  if [[ $nofix -eq 0 && -n "$old" && "$old" != "$dest" ]]; then
+    echo
+    info "шляхи від старого користувача — переписую"
+    cmd_fix --from "$old" --to "$dest" --root "$dest"
   fi
 
   echo
@@ -395,9 +491,7 @@ cmd_gc() {
       dim "dry-run, нічого не видалено"
     else
       if [[ $yes -eq 0 ]]; then
-        printf 'Видалити? [y/N] '
-        local ans=""; read -r ans || true
-        [[ "$ans" == [yY]* ]] || { info "скасовано"; return 0; }
+        confirm "Видалити?" || { info "скасовано"; return 0; }
       fi
       rm -rf -- "${victims[@]}"
       find "$plug/cache" -mindepth 1 -type d -empty -delete 2>/dev/null || true
@@ -430,12 +524,21 @@ cmd_ls() {
   tar tzf "$arch" | sed 's/^/    /'
 }
 
-case "${1:-}" in
-  tar)  shift; cmd_tar "$@" ;;
-  up)   shift; cmd_up  "$@" ;;
-  fix)  shift; cmd_fix "$@" ;;
-  gc)   shift; cmd_gc  "$@" ;;
-  ls)   shift; cmd_ls  "$@" ;;
-  -h|--help|help|"") usage ;;
-  *) die "невідома команда: $1 (дивись ./claude-bak --help)" ;;
-esac
+main() {
+  case "${1:-}" in
+    tar)  shift; cmd_tar "$@" ;;
+    up)   shift; cmd_up  "$@" ;;
+    fix)  shift; cmd_fix "$@" ;;
+    gc)   shift; cmd_gc  "$@" ;;
+    ls)   shift; cmd_ls  "$@" ;;
+    -h|--help|help|"") usage ;;
+    *) die "невідома команда: $1 (дивись: $SELF --help)" ;;
+  esac
+}
+
+# Запускаємось і з диска, і з пайпа, але не коли скрипт сорснули. Під curl | bash
+# BASH_SOURCE[0] порожній, а $0 — це "bash", тож звичайна перевірка на рівність
+# ніколи не спрацює і скрипт мовчки не зробить нічого.
+if [[ -z "${BASH_SOURCE[0]:-}" || "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi
