@@ -241,9 +241,85 @@ build_ignoreip() {
     FAIL2BAN_IGNOREIP="${NETS[*]}"
 }
 
+# Fedora ships no action.d/ufw.conf — none of the fail2ban subpackages carry it
+# and nothing in the repositories provides it, so `banaction = ufw` fails with
+# "Found no accessible config files for 'action.d/ufw'" and the jail is skipped.
+# Install upstream's action ourselves.
+#
+# One deliberate change from upstream: `add` is "insert 1", not "prepend".
+# Fedora's ufw is 0.35, whose command list has `insert NUM RULE` and no
+# `prepend` at all, so the upstream default would fail on every ban.
+install_ufw_action() {
+    local ACTION="/etc/fail2ban/action.d/ufw.conf"
+
+    if [[ -f "$ACTION" ]]; then
+        log_success "fail2ban ufw action already present at $ACTION"
+        return 0
+    fi
+
+    log_info "Installing the fail2ban ufw action..."
+    sudo mkdir -p "$(dirname "$ACTION")"
+    sudo tee "$ACTION" >/dev/null <<'ACTION_EOF'
+# Fail2Ban action configuration file for ufw
+#
+# Installed by the dotenv setup (fedora/postinstall.sh) because Fedora does not
+# package it. Taken from fail2ban upstream (config/action.d/ufw.conf, 1.1.0),
+# with `add` changed from "prepend" to "insert 1": ufw 0.35 has no prepend verb.
+#
+# Author: Guilhem Lettron, enhancements by Daniel Black
+
+[Definition]
+
+actionstart =
+
+actionstop =
+
+actioncheck =
+
+actionban = if [ -n "<application>" ] && ufw app info "<application>"
+            then
+              ufw <add> <blocktype> from <ip> to <destination> app "<application>" comment "<comment>"
+            else
+              ufw <add> <blocktype> from <ip> to <destination> comment "<comment>"
+            fi
+            <kill>
+
+actionunban = if [ -n "<application>" ] && ufw app info "<application>"
+              then
+                ufw delete <blocktype> from <ip> to <destination> app "<application>"
+              else
+                ufw delete <blocktype> from <ip> to <destination>
+              fi
+
+kill-mode =
+
+_kill_ =
+_kill_ss = ss -K dst "[<ip>]"
+_kill_conntrack = conntrack -D -s "<ip>"
+
+kill = <_kill_<kill-mode>>
+
+[Init]
+
+# ufw 0.35 knows "insert NUM", not "prepend"
+add = insert 1
+
+blocktype = reject
+
+destination = any
+
+application =
+
+comment = by Fail2Ban after <failures> attempts against <name>
+ACTION_EOF
+
+    log_success "fail2ban ufw action installed at $ACTION"
+}
+
 # Point fail2ban at ufw and watch sshd. Tailscale and localhost are never banned.
 configure_fail2ban() {
     build_ignoreip
+    install_ufw_action
 
     local JAIL="/etc/fail2ban/jail.local"
     local FIREWALLD_DROPIN="/etc/fail2ban/jail.d/00-firewalld.conf"
@@ -285,7 +361,13 @@ EOF
     log_info "Everything knocking from outside those is subject to the jail"
 
     log_info "Enabling fail2ban..."
-    sudo systemctl enable --now fail2ban
+    sudo systemctl enable fail2ban >/dev/null 2>&1 || true
+    # restart, not "enable --now": on a re-run the service is already up and
+    # --now would leave it running with the previous config
+    if ! sudo systemctl restart fail2ban; then
+        log_error "fail2ban failed to start — check: sudo journalctl -u fail2ban -n 30"
+        return 1
+    fi
     log_success "fail2ban enabled"
 }
 
