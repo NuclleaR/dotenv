@@ -53,6 +53,19 @@ fi
 # than an unset one, gpg would try to write the prompt to it.
 [[ -t 0 ]] && export GPG_TTY="${TTY:-$(tty)}"
 
+# Package manager caches and stores live on the projects volume when there is
+# one (fedora/storage.sh creates it). pnpm and bun deduplicate by hardlinking
+# out of their store, and a hardlink cannot cross a filesystem boundary — a
+# store left on / would silently degrade to copying every package.
+if [[ -d "$HOME/projects/.stores" ]]; then
+    export npm_config_cache="$HOME/projects/.stores/npm"
+    export YARN_CACHE_FOLDER="$HOME/projects/.stores/yarn"
+    export BUN_INSTALL_CACHE_DIR="$HOME/projects/.stores/bun"
+    # pnpm reads its store from config, not the environment:
+    #   pnpm config set store-dir ~/projects/.stores/pnpm
+    export PNPM_HOME="$HOME/projects/.stores/pnpm"
+fi
+
 # Directory of this file, so the other shared configs can be sourced next to it
 SHARED_DIR="${${(%):-%x}:A:h}"
 

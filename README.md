@@ -54,6 +54,7 @@ It installs rustup with `--no-modify-path`; `cargo` lands on `PATH` through `sha
 ./common/gpg.sh                          # signing key + git commit.gpgsign
 ./fedora/postinstall.sh                  # firewalld, fail2ban, fstrim, journal cap
 ./fedora/apps.sh -a                      # podman, cli tools, rust, starship, mise, fonts
+./fedora/storage.sh -s 120G              # VDO-backed ~/projects volume + package stores
 ```
 
 ### Without cloning
@@ -98,6 +99,32 @@ detects the port sshd actually listens on and allows it in firewalld's default
 zone *before* the old ufw setup is removed, and puts the local networks in
 fail2ban's `ignoreip` so a ban can never lock you out of your own LAN. firewalld is stopped, disabled and masked; the
 package is only removed when nothing else depends on it.
+
+### The projects volume
+
+`fedora/storage.sh` carves a logical volume out of the free space in the volume
+group, puts XFS on it and mounts it at `~/projects`. It never wipes a disk — the
+space comes from what is unallocated in an existing VG.
+
+By default the volume is VDO backed (block level dedup + compression), because
+`npm` *copies* packages into every `node_modules`: twenty worktrees of one repo
+are twenty physical copies of the same tree. `pnpm` and `bun` solve that
+themselves by hardlinking out of a shared store, so `--no-vdo` is the right call
+if nothing you build uses npm or yarn classic.
+
+The package manager stores live **inside** the volume, at `~/projects/.stores`,
+and `shared/zsh.sh` exports the cache variables when that directory exists. This
+is not cosmetic: a hardlink cannot cross a filesystem boundary, so a pnpm or bun
+store left on `/` while the projects live on their own volume silently degrades
+to copying every package.
+
+Two things to keep an eye on with VDO:
+
+- it is **thin provisioned**. `df` shows the virtual size; the number that
+  matters is `sudo vdostats --human-readable`. When physical use nears 100%,
+  writes fail regardless of what `df` says.
+- physical space is reclaimed **only** through discard, so the script overrides
+  `fstrim.timer` from weekly to daily.
 
 ## Other machines
 
