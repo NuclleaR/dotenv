@@ -2,8 +2,9 @@
 
 # Shell setup for Fedora
 #
-# Installs zsh, starship, keychain and the zsh-users plugins, then materialises
-# the runtime config into ~/.shell and points ~/.zshrc at it.
+# Sets up the shell: zsh, starship, the zsh-users plugins, and the runtime
+# config in ~/.shell that ~/.zshrc sources. Applications that are not part of
+# the shell itself live in fedora/apps.sh.
 #
 # Run it straight off the internet, no clone needed:
 #
@@ -216,25 +217,6 @@ install_prerequisites() {
     log_success "Prerequisites installed"
 }
 
-# Install keychain — it keeps a single ssh-agent per host that every terminal
-# reuses, which is what makes the SSH passphrase a once-per-boot question on a
-# remote box. shared/zsh.sh evaluates it at shell start.
-install_keychain() {
-    if command_exists keychain; then
-        log_success "keychain already installed"
-        log_info "keychain version: $(keychain --version 2>&1 | head -n1)"
-        return 0
-    fi
-
-    log_info "Installing keychain..."
-    if ! sudo dnf install -y keychain; then
-        log_error "Failed to install keychain"
-        return 1
-    fi
-
-    log_success "keychain installed"
-}
-
 # Install Starship prompt if it is not present and apply the dotenv config
 install_starship() {
     if command_exists starship; then
@@ -380,7 +362,6 @@ main() {
 
     install_zsh
     install_prerequisites
-    install_keychain
     install_runtime_config
     install_starship
     install_zsh_plugins

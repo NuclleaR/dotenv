@@ -119,21 +119,18 @@ still what `openSUSE/shell.sh` uses. The two are deliberately different.
 - `ssh-keygen -F <host>` **must** be called with `-f <known_hosts>`. Without it ssh-keygen resolves the path from the passwd entry rather than `$HOME`, so the check reads a different file than the script writes and the seeding stops being idempotent.
 - Agent strategy is `keychain`, not a systemd user unit: one agent per host shared by every terminal, evaluated from `shared/zsh.sh` for **interactive shells only** (a non-interactive zsh must never block on a passphrase prompt). `gpg-agent` needs no equivalent — it is already one daemon per user; `common/gpg.sh` only sets its cache TTL.
 - `GPG_TTY` is exported only when a terminal exists. An empty `GPG_TTY` is worse than an unset one — gpg tries to write the prompt into it.
-- **ufw over firewalld is a deliberate choice, do not "fix" it.** Fedora's ufw
-  is stale: version 0.35 from Fedora 40 through 44, and every changelog entry is
-  an automated mass rebuild — no maintainer has touched the content in years.
-  firewalld in the same repo is actively rebased. The staleness is known and
-  accepted; ufw's syntax is the one in use on the other machines here. Do not
-  propose switching back on the strength of the changelog alone.
-- **fail2ban's ufw action is shipped by this repo, not by Fedora.** None of the
-  `fail2ban*` subpackages carry `action.d/ufw.conf` and nothing in the repos
-  provides it, so `banaction = ufw` dies with "Found no accessible config files
-  for 'action.d/ufw'" and the jail is skipped — the service then fails to start
-  entirely. `install_ufw_action` writes upstream's file with one change: `add`
-  is `insert 1`, not `prepend`, because Fedora's ufw is 0.35 and its command
-  list has `insert NUM RULE` and no `prepend` at all. Verify any change with
-  `fail2ban-client -c <dir> -t`, which needs no root.
+- **fail2ban's ban action comes from the package, not from `jail.local`.**
+  `fail2ban-firewalld` ships `jail.d/00-firewalld.conf` with
+  `banaction = firewallcmd-rich-rules`, and **`jail.d` wins over `jail.local`** —
+  setting `banaction` in the generated `jail.local` is silently ignored. An
+  earlier version of this script moved that drop-in aside to force
+  `banaction = ufw`, which then required hand-shipping an `action.d/ufw.conf`
+  that Fedora does not package. `restore_firewalld_dropin` undoes both. Do not
+  reintroduce a `banaction` line.
 - `configure_fail2ban` ends with `systemctl restart`, not `enable --now`: on a
   re-run the service is already up and `--now` would leave it running with the
   old config.
-- `fedora/postinstall.sh` assumes a headless box reached over SSH. The sshd port is detected and allowed *before* `ufw enable`, and the function refuses to enable ufw when that rule is missing from `ufw show added`. Keep that guard. firewalld is stopped/disabled/masked; the package is removed only when `dnf repoquery --whatrequires` comes back empty.
+- Validate any fail2ban change with `fail2ban-client -c <dir> -t` against a copy
+  of `/etc/fail2ban` — it needs no root, so it works over a plain SSH session.
+
+- `fedora/postinstall.sh` assumes a headless box reached over SSH, so the order in `main()` matters: firewalld is installed, unmasked, allowed the `ssh` service in the default zone and reloaded **before** `remove_ufw` takes the old firewall away. Every zone Fedora ships already permits `ssh`, so bringing firewalld up cannot cut a live session. A non-default sshd port is opened explicitly, since the `ssh` service definition only covers 22.

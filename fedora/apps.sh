@@ -66,6 +66,7 @@ CLI_PACKAGES=(
     wget2-wget  # shim providing /usr/bin/wget; plain 'wget' is gone since F41
     unzip
     du-dust
+    keychain    # one ssh-agent per host, shared by every terminal
 )
 
 # Rust tools that are not packaged, installed with cargo

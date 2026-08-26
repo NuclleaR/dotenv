@@ -52,7 +52,7 @@ It installs rustup with `--no-modify-path`; `cargo` lands on `PATH` through `sha
 ./common/ssh.sh                          # ed25519 key, keychain, ~/.ssh/config, GitHub
 ./common/ssh.sh -n id_ed25519_work -H github-work
 ./common/gpg.sh                          # signing key + git commit.gpgsign
-./fedora/postinstall.sh                  # firewalld -> ufw, fail2ban, fstrim, journal cap
+./fedora/postinstall.sh                  # firewalld, fail2ban, fstrim, journal cap
 ./fedora/apps.sh -a                      # podman, cli tools, rust, starship, mise, fonts
 ```
 
@@ -94,9 +94,9 @@ ssh-agent per host, so on a machine you reach from many terminals the passphrase
 is asked by the first session after a boot and by none of the ones after it.
 
 `fedora/postinstall.sh` is written for a headless box reached over SSH: it
-detects the port sshd actually listens on and allows it *before* ufw is ever
-enabled, refuses to enable ufw if that rule is missing, and puts the Tailscale
-range in fail2ban's `ignoreip`. firewalld is stopped, disabled and masked; the
+detects the port sshd actually listens on and allows it in firewalld's default
+zone *before* the old ufw setup is removed, and puts the local networks in
+fail2ban's `ignoreip` so a ban can never lock you out of your own LAN. firewalld is stopped, disabled and masked; the
 package is only removed when nothing else depends on it.
 
 ## Other machines

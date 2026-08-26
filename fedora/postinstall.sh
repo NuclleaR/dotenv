@@ -2,10 +2,12 @@
 
 # Post-install setup for Fedora
 #
-# Replaces firewalld with ufw and adds fail2ban to watch sshd for brute force.
+# Sets up firewalld and adds fail2ban to watch sshd for brute force.
 # Written for a headless box reached over SSH/Tailscale: every step that touches
-# the firewall keeps the current session alive — the SSH port is allowed before
-# ufw is ever enabled, and the Tailscale range is never banned.
+# the firewall keeps the current session alive — the ssh service is allowed in
+# the default zone before firewalld is reloaded, and the local networks are
+# never banned. An earlier version of this script installed ufw instead; that
+# is reverted here.
 
 # Run it straight off the internet, no clone needed — it only touches system
 # packages and system config, nothing in this repo:
@@ -97,105 +99,82 @@ warn_if_remote_session() {
     fi
 }
 
-# Stop, disable and mask firewalld. Removal only happens when nothing else
-# depends on it — otherwise the package stays, masked and inert.
-disable_firewalld() {
-    if ! systemctl list-unit-files firewalld.service >/dev/null 2>&1; then
-        log_success "firewalld is not installed"
-        return 0
+# Put firewalld back: earlier versions of this script replaced it with ufw, so
+# it may be masked or gone. Fedora's shipped zones already allow the ssh service,
+# so bringing it up cannot cut an existing session.
+restore_firewalld() {
+    if ! rpm -q firewalld >/dev/null 2>&1; then
+        log_info "Installing firewalld..."
+        if ! sudo dnf install -y firewalld; then
+            log_error "Failed to install firewalld"
+            return 1
+        fi
+    else
+        log_success "firewalld already installed"
     fi
 
-    if systemctl is-active --quiet firewalld; then
-        log_info "Stopping firewalld..."
-        sudo systemctl stop firewalld
+    if [[ "$(systemctl is-enabled firewalld 2>&1)" == "masked" ]]; then
+        log_info "firewalld is masked, unmasking..."
+        sudo systemctl unmask firewalld
     fi
 
-    log_info "Disabling and masking firewalld..."
-    sudo systemctl disable firewalld >/dev/null 2>&1 || true
-    sudo systemctl mask firewalld >/dev/null 2>&1 || true
-    log_success "firewalld stopped, disabled and masked"
-
-    remove_firewalld
-}
-
-# Remove the firewalld package, but only when that does not drag anything else
-# out with it (libvirt-daemon-config-network and cockpit both require it).
-remove_firewalld() {
-    local dependents=()
-
-    mapfile -t dependents < <(
-        dnf repoquery --installed --whatrequires firewalld --qf '%{name}' 2>/dev/null |
-            grep -vE '^(firewalld|python3-firewall)' | sort -u
-    ) || true
-
-    if [[ ${#dependents[@]} -gt 0 ]]; then
-        log_warning "Not removing firewalld — these installed packages require it:"
-        local pkg
-        for pkg in "${dependents[@]}"; do
-            log_warning "    $pkg"
-        done
-        log_info "firewalld stays installed but masked, so it cannot start"
-        log_info "To remove it anyway (and everything above) run:"
-        log_info "    sudo dnf remove firewalld"
-        return 0
-    fi
-
-    log_info "Removing firewalld..."
-    if ! sudo dnf remove -y firewalld; then
-        log_error "Failed to remove firewalld (it stays masked, so it will not start)"
+    log_info "Enabling firewalld..."
+    sudo systemctl enable firewalld >/dev/null 2>&1 || true
+    if ! sudo systemctl restart firewalld; then
+        log_error "firewalld failed to start — check: sudo journalctl -u firewalld -n 30"
         return 1
     fi
 
-    log_success "firewalld removed"
+    log_success "firewalld enabled ($(sudo firewall-cmd --state 2>/dev/null || echo unknown))"
 }
 
-# Install ufw from the Fedora repositories
-install_ufw() {
-    if command_exists ufw; then
-        log_success "ufw already installed"
-        log_info "ufw version: $(sudo ufw version | head -n1)"
-        return 0
-    fi
+# Make sure the port we are logged in over is allowed, and trust the tailnet
+configure_firewalld() {
+    local ZONE
+    ZONE="$(sudo firewall-cmd --get-default-zone 2>/dev/null || echo public)"
+    log_info "Default zone: $ZONE"
 
-    log_info "Installing ufw..."
-    if ! sudo dnf install -y ufw; then
-        log_error "Failed to install ufw"
-        return 1
-    fi
+    log_info "Allowing the ssh service in $ZONE..."
+    sudo firewall-cmd --permanent --zone="$ZONE" --add-service=ssh >/dev/null
 
-    log_success "ufw installed"
-}
-
-# Stage the rules, verify SSH is among them, and only then enable ufw
-configure_ufw() {
-    log_info "Configuring ufw defaults..."
-    sudo ufw default deny incoming >/dev/null
-    sudo ufw default allow outgoing >/dev/null
-    log_success "Defaults set: deny incoming, allow outgoing"
-
-    # limit instead of allow: same access, but rate limited against brute force
-    local port
-    for port in "${SSH_PORTS[@]}"; do
-        log_info "Allowing (rate limited) SSH on $port/tcp..."
-        sudo ufw limit "$port/tcp" comment 'SSH (dotenv)' >/dev/null
+    # A non-standard sshd port is not covered by the ssh service definition
+    local PORT
+    for PORT in "${SSH_PORTS[@]}"; do
+        if [[ "$PORT" != "22" ]]; then
+            log_info "Allowing the non-standard sshd port $PORT/tcp..."
+            sudo firewall-cmd --permanent --zone="$ZONE" --add-port="$PORT/tcp" >/dev/null
+        fi
     done
 
-    log_info "Allowing everything on $TAILSCALE_IFACE..."
-    sudo ufw allow in on "$TAILSCALE_IFACE" comment 'Tailscale (dotenv)' >/dev/null
-    if ! ip link show "$TAILSCALE_IFACE" >/dev/null 2>&1; then
-        log_warning "$TAILSCALE_IFACE does not exist yet — the rule applies once Tailscale is up"
+    if ip link show "$TAILSCALE_IFACE" >/dev/null 2>&1; then
+        log_info "Moving $TAILSCALE_IFACE into the trusted zone..."
+        sudo firewall-cmd --permanent --zone=trusted --change-interface="$TAILSCALE_IFACE" >/dev/null
+    else
+        log_warning "$TAILSCALE_IFACE does not exist — re-run this after Tailscale is up to trust it"
     fi
 
-    # Last line of defence before we start dropping packets on a remote box
-    if ! sudo ufw show added | grep -qE "limit .*${SSH_PORTS[0]}"; then
-        log_error "SSH rule is missing from the staged ufw rules — refusing to enable ufw"
-        return 1
+    sudo firewall-cmd --reload >/dev/null
+    log_success "firewalld configured"
+}
+
+# Undo the ufw setup an earlier version of this script may have applied
+remove_ufw() {
+    if ! rpm -q ufw >/dev/null 2>&1; then
+        log_success "ufw is not installed"
+        return 0
     fi
 
-    log_info "Enabling ufw..."
-    sudo ufw --force enable >/dev/null
-    sudo systemctl enable ufw >/dev/null 2>&1 || true
-    log_success "ufw enabled"
+    log_info "Disabling ufw..."
+    sudo ufw --force disable >/dev/null 2>&1 || true
+    sudo systemctl disable --now ufw >/dev/null 2>&1 || true
+
+    log_info "Removing ufw..."
+    if ! sudo dnf remove -y ufw; then
+        log_warning "Could not remove ufw — it is disabled, so it will not interfere"
+        return 0
+    fi
+
+    log_success "ufw removed"
 }
 
 # Install fail2ban
@@ -241,95 +220,37 @@ build_ignoreip() {
     FAIL2BAN_IGNOREIP="${NETS[*]}"
 }
 
-# Fedora ships no action.d/ufw.conf — none of the fail2ban subpackages carry it
-# and nothing in the repositories provides it, so `banaction = ufw` fails with
-# "Found no accessible config files for 'action.d/ufw'" and the jail is skipped.
-# Install upstream's action ourselves.
-#
-# One deliberate change from upstream: `add` is "insert 1", not "prepend".
-# Fedora's ufw is 0.35, whose command list has `insert NUM RULE` and no
-# `prepend` at all, so the upstream default would fail on every ban.
-install_ufw_action() {
-    local ACTION="/etc/fail2ban/action.d/ufw.conf"
+# fail2ban-firewalld ships jail.d/00-firewalld.conf, which sets
+# banaction = firewallcmd-rich-rules. An earlier version of this script moved it
+# aside to force banaction = ufw; put it back and let the packaged action win, so
+# nothing here has to hand-maintain a ban action.
+restore_firewalld_dropin() {
+    local DROPIN="/etc/fail2ban/jail.d/00-firewalld.conf"
+    local UFW_ACTION="/etc/fail2ban/action.d/ufw.conf"
 
-    if [[ -f "$ACTION" ]]; then
-        log_success "fail2ban ufw action already present at $ACTION"
-        return 0
+    if [[ -f "$DROPIN.disabled" && ! -f "$DROPIN" ]]; then
+        log_info "Restoring the fail2ban firewalld drop-in..."
+        sudo mv "$DROPIN.disabled" "$DROPIN"
+        log_success "Restored $DROPIN"
+    elif [[ -f "$DROPIN" ]]; then
+        log_success "fail2ban firewalld drop-in in place"
+    else
+        log_warning "$DROPIN is missing — install it with: sudo dnf install fail2ban-firewalld"
     fi
 
-    log_info "Installing the fail2ban ufw action..."
-    sudo mkdir -p "$(dirname "$ACTION")"
-    sudo tee "$ACTION" >/dev/null <<'ACTION_EOF'
-# Fail2Ban action configuration file for ufw
-#
-# Installed by the dotenv setup (fedora/postinstall.sh) because Fedora does not
-# package it. Taken from fail2ban upstream (config/action.d/ufw.conf, 1.1.0),
-# with `add` changed from "prepend" to "insert 1": ufw 0.35 has no prepend verb.
-#
-# Author: Guilhem Lettron, enhancements by Daniel Black
-
-[Definition]
-
-actionstart =
-
-actionstop =
-
-actioncheck =
-
-actionban = if [ -n "<application>" ] && ufw app info "<application>"
-            then
-              ufw <add> <blocktype> from <ip> to <destination> app "<application>" comment "<comment>"
-            else
-              ufw <add> <blocktype> from <ip> to <destination> comment "<comment>"
-            fi
-            <kill>
-
-actionunban = if [ -n "<application>" ] && ufw app info "<application>"
-              then
-                ufw delete <blocktype> from <ip> to <destination> app "<application>"
-              else
-                ufw delete <blocktype> from <ip> to <destination>
-              fi
-
-kill-mode =
-
-_kill_ =
-_kill_ss = ss -K dst "[<ip>]"
-_kill_conntrack = conntrack -D -s "<ip>"
-
-kill = <_kill_<kill-mode>>
-
-[Init]
-
-# ufw 0.35 knows "insert NUM", not "prepend"
-add = insert 1
-
-blocktype = reject
-
-destination = any
-
-application =
-
-comment = by Fail2Ban after <failures> attempts against <name>
-ACTION_EOF
-
-    log_success "fail2ban ufw action installed at $ACTION"
+    # Our hand-written ufw action is dead weight now
+    if [[ -f "$UFW_ACTION" ]] && grep -qF "dotenv setup" "$UFW_ACTION"; then
+        log_info "Removing the ufw action this script used to install..."
+        sudo rm -f "$UFW_ACTION"
+    fi
 }
 
 # Point fail2ban at ufw and watch sshd. Tailscale and localhost are never banned.
 configure_fail2ban() {
     build_ignoreip
-    install_ufw_action
+    restore_firewalld_dropin
 
     local JAIL="/etc/fail2ban/jail.local"
-    local FIREWALLD_DROPIN="/etc/fail2ban/jail.d/00-firewalld.conf"
-
-    # Fedora ships this drop-in and it forces banaction back to firewalld
-    if [[ -f "$FIREWALLD_DROPIN" ]]; then
-        log_info "Disabling the firewalld drop-in that overrides banaction..."
-        sudo mv "$FIREWALLD_DROPIN" "$FIREWALLD_DROPIN.disabled"
-        log_success "Moved to $FIREWALLD_DROPIN.disabled"
-    fi
 
     if [[ -f "$JAIL" ]] && ! grep -qF "Generated by the dotenv setup" "$JAIL"; then
         local BACKUP="$JAIL.backup.$(date +%Y%m%d-%H%M%S)"
@@ -342,8 +263,9 @@ configure_fail2ban() {
 # Generated by the dotenv setup (fedora/postinstall.sh)
 
 [DEFAULT]
-# ufw owns the firewall on this box, so bans go through it, not firewalld
-banaction = ufw
+# banaction is deliberately not set here: jail.d/00-firewalld.conf from the
+# fail2ban-firewalld package sets firewallcmd-rich-rules, and jail.d wins over
+# jail.local, so setting it here would be silently ignored anyway.
 # Fedora logs sshd to the journal, not to a file
 backend   = systemd
 # Never ban ourselves over loopback or the tailnet
@@ -356,7 +278,7 @@ maxretry  = 5
 enabled = true
 port    = $(IFS=,; echo "${SSH_PORTS[*]}")
 EOF
-    log_success "fail2ban configured (banaction=ufw, sshd jail enabled)"
+    log_success "fail2ban configured (banaction from the firewalld drop-in, sshd jail enabled)"
     log_info "Never banned: $FAIL2BAN_IGNOREIP"
     log_info "Everything knocking from outside those is subject to the jail"
 
@@ -415,8 +337,8 @@ EOF
 
 # Print what the machine ended up with
 show_status() {
-    log_info "ufw status:"
-    sudo ufw status verbose || true
+    log_info "firewalld:"
+    sudo firewall-cmd --list-all || true
 
     echo ""
     log_info "fail2ban sshd jail:"
@@ -427,10 +349,10 @@ main() {
     detect_ssh_ports
     warn_if_remote_session
 
-    disable_firewalld
-
-    install_ufw
-    configure_ufw
+    # firewalld first, so the box is never briefly unprotected, then ufw goes
+    restore_firewalld
+    configure_firewalld
+    remove_ufw
 
     install_fail2ban
     configure_fail2ban
