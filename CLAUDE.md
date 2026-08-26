@@ -119,6 +119,12 @@ still what `openSUSE/shell.sh` uses. The two are deliberately different.
 - `ssh-keygen -F <host>` **must** be called with `-f <known_hosts>`. Without it ssh-keygen resolves the path from the passwd entry rather than `$HOME`, so the check reads a different file than the script writes and the seeding stops being idempotent.
 - Agent strategy is `keychain`, not a systemd user unit: one agent per host shared by every terminal, evaluated from `shared/zsh.sh` for **interactive shells only** (a non-interactive zsh must never block on a passphrase prompt). `gpg-agent` needs no equivalent — it is already one daemon per user; `common/gpg.sh` only sets its cache TTL.
 - `GPG_TTY` is exported only when a terminal exists. An empty `GPG_TTY` is worse than an unset one — gpg tries to write the prompt into it.
+- **ufw over firewalld is a deliberate choice, do not "fix" it.** Fedora's ufw
+  is stale: version 0.35 from Fedora 40 through 44, and every changelog entry is
+  an automated mass rebuild — no maintainer has touched the content in years.
+  firewalld in the same repo is actively rebased. The staleness is known and
+  accepted; ufw's syntax is the one in use on the other machines here. Do not
+  propose switching back on the strength of the changelog alone.
 - **fail2ban's ufw action is shipped by this repo, not by Fedora.** None of the
   `fail2ban*` subpackages carry `action.d/ufw.conf` and nothing in the repos
   provides it, so `banaction = ufw` dies with "Found no accessible config files
