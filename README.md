@@ -59,15 +59,29 @@ It installs rustup with `--no-modify-path`; `cargo` lands on `PATH` through `sha
 
 ### Without cloning
 
-All three Fedora scripts run straight off the internet, no clone needed:
+All four Fedora scripts run straight off the internet, no clone needed. On a
+fresh system run them **in this order**:
 
 ```bash
 RAW=https://raw.githubusercontent.com/NuclleaR/dotenv/main
-curl -sS $RAW/fedora/shell.sh       | bash
-curl -sS $RAW/fedora/postinstall.sh | bash
-curl -sS $RAW/fedora/apps.sh        | bash -s -- -a
-curl -sS $RAW/fedora/apps.sh        | bash -s -- -i rust -i cli
+curl -sS $RAW/fedora/postinstall.sh | bash          # 1. harden it first
+curl -sS $RAW/fedora/storage.sh     | bash          # 2. carve the projects volume
+curl -sS $RAW/fedora/apps.sh        | bash -s -- -a # 3. software
+curl -sS $RAW/fedora/shell.sh       | bash          # 4. shell and its config
 ```
+
+**`postinstall.sh` goes first, always.** The name means *after installing the
+operating system*, not after installing software. It is what closes the box:
+firewall up, fail2ban watching sshd. Everything after it pulls packages and opens
+ports, so running it later leaves a freshly installed machine exposed for the
+whole length of the setup. It depends on nothing the other scripts provide and
+installs what it needs itself.
+
+Anything that has to happen *after* `apps.sh` goes at the end of the sequence as
+its own step — never folded back into `postinstall.sh`.
+
+`storage.sh` comes next so the projects volume exists before anything starts
+filling the disk. `apps.sh` and `shell.sh` are independent of each other.
 
 `bash`, not `sh` — they use arrays and `mapfile`.
 

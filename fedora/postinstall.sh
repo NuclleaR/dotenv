@@ -3,6 +3,15 @@
 # Post-install setup for Fedora
 #
 # Sets up firewalld and adds fail2ban to watch sshd for brute force.
+#
+# RUN THIS FIRST on a fresh system, before apps.sh, storage.sh or shell.sh.
+# "post install" is after installing the *operating system*, not after installing
+# software. This is what closes the box, so it needs nothing any of the other
+# scripts provide and installs what it needs itself. Running it later leaves a
+# new machine exposed for the whole length of the setup.
+#
+# Anything that has to happen after apps.sh belongs at the end of that sequence,
+# not in here.
 # Written for a headless box reached over SSH/Tailscale: every step that touches
 # the firewall keeps the current session alive — the ssh service is allowed in
 # the default zone before firewalld is reloaded, and the local networks are
