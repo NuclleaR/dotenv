@@ -84,6 +84,16 @@ command -v starship >/dev/null && eval "$(starship init zsh)"
 
 command -v zoxide >/dev/null && eval "$(zoxide init zsh)"
 
+# mise: per-project runtime versions. Without this the mise.toml in a project
+# does nothing at all — the pinned runtime never reaches PATH.
+#
+# By default the runtimes land in ~/.local/share/mise on /. Uncomment to keep
+# them on the projects volume instead, where VDO deduplicates the copies shared
+# between projects pinned to the same version. Must stay ABOVE the activate line
+# below: exported afterwards, mise has already resolved the old path.
+# export MISE_DATA_DIR="$HOME/projects/.stores/mise"
+command -v mise >/dev/null && eval "$(mise activate zsh)"
+
 # Zsh plugins (installed by the per-distro setup script into ~/.zsh)
 [[ -f "$HOME/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh" ]] &&
     source "$HOME/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh"
