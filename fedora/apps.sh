@@ -47,6 +47,11 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# mise and other user-level installers write to ~/.local/bin, which is not on
+# PATH in every shell. Without this the probes below report things as missing
+# right after installing them.
+[[ -d "$HOME/.local/bin" ]] && PATH="$HOME/.local/bin:$PATH"
+
 # Which Nerd Font to fetch; the release asset is named "$NERD_FONT.tar.xz".
 # The default lives in its own variable so usage() cannot drift from it.
 NERD_FONT_DEFAULT="RobotoMono"
@@ -276,8 +281,16 @@ install_starship() {
 }
 
 install_mise() {
+    local MISE_BIN="$HOME/.local/bin/mise"
+
     if command_exists mise; then
         log_success "mise already installed"
+        log_info "mise version: $(mise --version 2>&1 | head -n1)"
+        return 0
+    fi
+
+    if [[ -x "$MISE_BIN" ]]; then
+        log_success "mise already installed at $MISE_BIN"
         return 0
     fi
 
@@ -287,7 +300,17 @@ install_mise() {
         return 1
     fi
 
-    log_success "mise installed"
+    # The installer writes to ~/.local/bin and never touches PATH — it only
+    # prints the activation hint. A zero exit code is therefore not proof the
+    # binary is there, and "installed" must not be claimed on the strength of it.
+    if [[ ! -x "$MISE_BIN" ]]; then
+        log_error "The installer reported success but $MISE_BIN is not there"
+        return 1
+    fi
+
+    log_success "mise installed at $MISE_BIN"
+    log_info "mise version: $("$MISE_BIN" --version 2>&1 | head -n1)"
+    log_info "shared/zsh.sh puts ~/.local/bin on PATH and runs 'mise activate zsh'"
 }
 
 install_rust() {

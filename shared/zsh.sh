@@ -36,6 +36,13 @@ export GITHUB_USERNAME=NuclleaR
 
 export RIP_GRAVEYARD=~/.local/share/Trash
 
+# ~/.local/bin is where mise and other user-level installers drop binaries.
+# Fedora puts it on PATH for bash but not for zsh, so without this mise is
+# installed and invisible — and the activation further down never fires.
+# typeset -U keeps the entry unique if something else adds it too.
+typeset -U path
+[[ -d "$HOME/.local/bin" ]] && path=("$HOME/.local/bin" $path)
+
 # keychain keeps one ssh-agent per host, shared by every terminal, so on a
 # remote box the passphrase is asked by the first session after a boot and by
 # none of the ones after it. Interactive shells only — a non-interactive one
