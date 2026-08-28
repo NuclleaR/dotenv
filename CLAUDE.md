@@ -140,5 +140,8 @@ still what `openSUSE/shell.sh` uses. The two are deliberately different.
   `apps.sh`, `storage.sh` or `shell.sh` provides; it installs what it needs
   itself. Anything that genuinely has to happen *after* `apps.sh` belongs at the
   end of the sequence in its own step, never folded back into `postinstall.sh`.
-  Documented order: postinstall, storage, apps, shell.
+  Documented order: **postinstall, storage (only if this box wants the projects
+  volume), shell, apps** — `storage.sh` before `apps.sh` because the package
+  manager stores live inside that volume, and `shell.sh` before `apps.sh` so the
+  rest of the setup is driven from a shell that is already zsh.
 - `fedora/postinstall.sh` assumes a headless box reached over SSH, so the order in `main()` matters: firewalld is installed, unmasked, allowed the `ssh` service in the default zone and reloaded **before** `remove_ufw` takes the old firewall away. Every zone Fedora ships already permits `ssh`, so bringing firewalld up cannot cut a live session. A non-default sshd port is opened explicitly, since the `ssh` service definition only covers 22.

@@ -53,8 +53,9 @@ It installs rustup with `--no-modify-path`; `cargo` lands on `PATH` through `sha
 ./common/ssh.sh -n id_ed25519_work -H github-work
 ./common/gpg.sh                          # signing key + git commit.gpgsign
 ./fedora/postinstall.sh                  # firewalld, fail2ban, fstrim, journal cap
-./fedora/apps.sh -a                      # podman, cli tools, rust, starship, mise, fonts
 ./fedora/storage.sh -s 120G              # VDO-backed ~/projects volume + package stores
+./fedora/shell.sh                        # zsh, starship, ~/.zshrc
+./fedora/apps.sh -a                      # podman, cli tools, rust, starship, mise, fonts
 ```
 
 ### Without cloning
@@ -65,9 +66,9 @@ fresh system run them **in this order**:
 ```bash
 RAW=https://raw.githubusercontent.com/NuclleaR/dotenv/main
 curl -sS $RAW/fedora/postinstall.sh | bash          # 1. harden it first
-curl -sS $RAW/fedora/storage.sh     | bash          # 2. carve the projects volume
-curl -sS $RAW/fedora/apps.sh        | bash -s -- -a # 3. software
-curl -sS $RAW/fedora/shell.sh       | bash          # 4. shell and its config
+curl -sS $RAW/fedora/storage.sh     | bash          # 2. carve the projects volume, if wanted
+curl -sS $RAW/fedora/shell.sh       | bash          # 3. zsh and its config
+curl -sS $RAW/fedora/apps.sh        | bash -s -- -a # 4. everything else
 ```
 
 **`postinstall.sh` goes first, always.** The name means *after installing the
@@ -80,8 +81,13 @@ installs what it needs itself.
 Anything that has to happen *after* `apps.sh` goes at the end of the sequence as
 its own step — never folded back into `postinstall.sh`.
 
-`storage.sh` comes next so the projects volume exists before anything starts
-filling the disk. `apps.sh` and `shell.sh` are independent of each other.
+`storage.sh` comes next, when this machine wants the projects volume at all, so
+that it exists before anything starts filling the disk — the package manager
+stores live inside it, and `apps.sh` would otherwise fill the old location.
+
+`shell.sh` then goes before `apps.sh`: the rest of the setup is nicer to drive
+from a shell that is already zsh with its config, and nothing in `apps.sh` is
+needed to get there.
 
 `bash`, not `sh` — they use arrays and `mapfile`.
 
