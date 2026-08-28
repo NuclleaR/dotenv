@@ -20,6 +20,7 @@ $status\
 $cmd_duration
 $os\
 $username\
+$hostname\
 $character"""
 
 palette = "tokyo_night"
@@ -173,4 +174,9 @@ EndeavourOS = "󰣇"
 show_always = true
 style_user = "green"
 style_root = "red"
-format = '[$user ]($style)'
+format = '[$user]($style)'
+
+[hostname]
+ssh_only = false
+style = "white"
+format = '[@$hostname ]($style)'
