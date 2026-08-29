@@ -189,10 +189,22 @@ upload_key_to_github() {
     fi
 }
 
+# Scratch repo for the signing test; global so the EXIT trap can reach it after
+# test_signing has returned.
+TMP_REPO=""
+
+cleanup_tmp_repo() {
+    [[ -n "$TMP_REPO" ]] && rm -rf "$TMP_REPO"
+    TMP_REPO=""
+    return 0
+}
+
 # Sign a throwaway commit in a temporary repo to prove the whole chain works
 test_signing() {
-    local TMP_REPO
+    # The trap matters here: this function stops at a passphrase prompt, so a
+    # Ctrl-C is the likely ending, not the exception.
     TMP_REPO="$(mktemp -d)"
+    trap cleanup_tmp_repo EXIT
 
     log_info "Signing a test commit (passphrase prompt follows)..."
 
@@ -204,7 +216,7 @@ test_signing() {
         log_warning "Test commit was not signed — check: gpg --list-secret-keys and echo \$GPG_TTY"
     fi
 
-    rm -rf "$TMP_REPO"
+    cleanup_tmp_repo
 }
 
 main() {

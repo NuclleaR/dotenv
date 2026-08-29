@@ -4,8 +4,8 @@
 #
 # Installs keychain (one ssh-agent per host, shared by every terminal — see
 # shared/zsh.sh) and then hands over to common/ssh.sh, which generates the
-# ed25519 key, loads it into the agent, writes ~/.ssh/config, seeds known_hosts
-# and uploads the public key to GitHub when gh is authenticated.
+# ed25519 key, loads it into the agent, writes ~/.ssh/config and uploads the
+# public key to GitHub when gh is authenticated. It does not touch known_hosts.
 #
 # Run it straight off the internet, no clone needed:
 #

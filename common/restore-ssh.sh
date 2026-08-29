@@ -63,7 +63,20 @@ if [[ ! "$RAW_URL" =~ ^https://gist\.githubusercontent\.com/ ]]; then
 fi
 
 # Create temporary directory
+#
+# The download, the decoded archive and the *decrypted* tarball of ~/.ssh all
+# land in here, so the directory must not outlive the script — not on an error,
+# and above all not on a Ctrl-C at the GPG passphrase prompt, which is exactly
+# where this script waits. One trap replaces the rm -rf that used to be
+# copy-pasted into every exit path.
 TEMP_DIR=$(mktemp -d)
+
+cleanup_temp_dir() {
+    [[ -n "${TEMP_DIR:-}" ]] && rm -rf "$TEMP_DIR"
+    return 0
+}
+trap cleanup_temp_dir EXIT
+
 log_info "Created temporary directory: $TEMP_DIR"
 
 # Download the backup
@@ -71,13 +84,11 @@ log_info "Downloading backup from Gist..."
 ENCODED_FILE="${TEMP_DIR}/ssh_backup.b64"
 if ! curl -sL "$RAW_URL" -o "$ENCODED_FILE"; then
     log_error "Failed to download backup"
-    rm -rf "$TEMP_DIR"
     exit 1
 fi
 
 if [[ ! -s "$ENCODED_FILE" ]]; then
     log_error "Downloaded file is empty"
-    rm -rf "$TEMP_DIR"
     exit 1
 fi
 
@@ -88,7 +99,6 @@ log_info "Decoding from base64..."
 ENCRYPTED_FILE="${TEMP_DIR}/ssh_backup.gpg"
 if ! base64 -d "$ENCODED_FILE" > "$ENCRYPTED_FILE"; then
     log_error "Failed to decode base64"
-    rm -rf "$TEMP_DIR"
     exit 1
 fi
 log_success "Backup decoded"
@@ -101,13 +111,11 @@ echo ""
 ARCHIVE_FILE="${TEMP_DIR}/ssh_backup.tar.gz"
 if ! gpg -d "$ENCRYPTED_FILE" > "$ARCHIVE_FILE" 2>/dev/null; then
     log_error "Failed to decrypt backup (wrong passphrase or corrupted file)"
-    rm -rf "$TEMP_DIR"
     exit 1
 fi
 
 if [[ ! -s "$ARCHIVE_FILE" ]]; then
     log_error "Decrypted file is empty"
-    rm -rf "$TEMP_DIR"
     exit 1
 fi
 
@@ -127,7 +135,6 @@ fi
 log_info "Extracting SSH files..."
 if ! tar -xzf "$ARCHIVE_FILE" -C ~; then
     log_error "Failed to extract archive"
-    rm -rf "$TEMP_DIR"
     exit 1
 fi
 log_success "SSH files extracted"
@@ -138,10 +145,6 @@ chmod 700 ~/.ssh
 chmod 600 ~/.ssh/* 2>/dev/null || true
 chmod 644 ~/.ssh/*.pub 2>/dev/null || true
 log_success "Permissions set"
-
-# Cleanup
-rm -rf "$TEMP_DIR"
-log_info "Temporary files cleaned up"
 
 echo ""
 echo "======================================"

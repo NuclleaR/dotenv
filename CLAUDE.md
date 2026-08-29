@@ -32,7 +32,7 @@ HOME="$SB" bash -c 'source …; command_exists() { [[ "$1" != curl ]]; }; instal
 HOME="$SB" bash -c 'source …; getent() { echo "u:x:1000:1000::/home/u:/bin/bash"; }; show_default_shell_hint'
 ```
 
-Entry points that can be executed directly: `./openSUSE/shell.sh`, `./fedora/shell.sh`, `./fedora/postinstall.sh`, `./common/rust.sh`, `./common/ssh.sh`, `./fedora/ssh.sh` (installs keychain, then runs `common/ssh.sh`; pipeable, downloads `common/` when there is no clone), `./common/gpg.sh`, `./arch/drivers.sh`, `./arch/zram.sh <setup|disable|stats>`, `./kde/keyboard.sh`. `./arch.sh` and `./ubuntu/bootstrap.sh` are flag dispatchers — run them with `-h` for the list of installable names. Both take `-i <name>` (install one thing), `-a` (everything) and `-v` (print versions); arch additionally has `-u` for a system update, while ubuntu spells that `-i upd`.
+Entry points that can be executed directly: `./openSUSE/shell.sh`, `./fedora/shell.sh`, `./fedora/postinstall.sh`, `./common/rust.sh`, `./common/ssh.sh`, `./fedora/ssh.sh` (installs keychain, then runs `common/ssh.sh`; pipeable, downloads `common/` when there is no clone), `./fedora/fix-ssh.sh` (SELinux module for SSH port forwarding; `-r` removes it, `-s` reports), `./common/gpg.sh`, `./arch/drivers.sh`, `./arch/zram.sh <setup|disable|stats>`, `./kde/keyboard.sh`. `./arch.sh` and `./ubuntu/bootstrap.sh` are flag dispatchers — run them with `-h` for the list of installable names. Both take `-i <name>` (install one thing), `-a` (everything) and `-v` (print versions); arch additionally has `-u` for a system update, while ubuntu spells that `-i upd`.
 
 ## Architecture
 
@@ -72,8 +72,9 @@ Everything optional in `shared/` is guarded (`command -v <tool> >/dev/null`, `[[
 
 ### Self-contained scripts (do not "fix" their duplicated logger)
 
-`fedora/shell.sh`, `fedora/postinstall.sh`, `fedora/apps.sh` and `fedora/ssh.sh` are meant to be
-run straight off the internet, without a clone:
+`fedora/shell.sh`, `fedora/postinstall.sh`, `fedora/apps.sh`, `fedora/ssh.sh` and
+`fedora/fix-ssh.sh` are meant to be run straight off the internet, without a
+clone:
 
 ```bash
 curl -sS https://raw.githubusercontent.com/NuclleaR/dotenv/main/fedora/apps.sh | bash -s -- -a
@@ -118,7 +119,7 @@ still what `openSUSE/shell.sh` uses. The two are deliberately different.
 ### SSH / GPG / firewall invariants
 
 - `common/ssh.sh` owns a block in `~/.ssh/config` delimited by `# >>> dotenv managed >>>` / `# <<< dotenv managed <<<`. Everything outside the markers is preserved; the block is *replaced*, never appended twice.
-- `ssh-keygen -F <host>` **must** be called with `-f <known_hosts>`. Without it ssh-keygen resolves the path from the passwd entry rather than `$HOME`, so the check reads a different file than the script writes and the seeding stops being idempotent.
+- **Nothing in this repo may write `~/.ssh/known_hosts`.** No `ssh-keyscan` seeding, no `StrictHostKeyChecking=accept-new`. Seeding trusts whatever the network answers at that moment, and appending to a file whose last line lacks a newline corrupts the entry already there. Accepting a host key is the user's decision, made against the fingerprint ssh prints.
 - Agent strategy is `keychain`, not a systemd user unit: one agent per host shared by every terminal, evaluated from `shared/zsh.sh` for **interactive shells only** (a non-interactive zsh must never block on a passphrase prompt). `gpg-agent` needs no equivalent — it is already one daemon per user; `common/gpg.sh` only sets its cache TTL.
 - `GPG_TTY` is exported only when a terminal exists. An empty `GPG_TTY` is worse than an unset one — gpg tries to write the prompt into it.
 - **fail2ban's ban action comes from the package, not from `jail.local`.**
@@ -135,6 +136,18 @@ still what `openSUSE/shell.sh` uses. The two are deliberately different.
 - Validate any fail2ban change with `fail2ban-client -c <dir> -t` against a copy
   of `/etc/fail2ban` — it needs no root, so it works over a plain SSH session.
 
+- **VS Code Remote-SSH needs `fedora/fix-ssh.sh` on a stock Fedora box.** Plain
+  `ssh` works while every forwarded port fails with `channel N: open failed:
+  connect failed`, because SELinux denies the `sshd_session_t` domain
+  `name_connect` on `ephemeral_port_t` (OpenSSH 9.8+ split the daemon into
+  `sshd` and `sshd-session`, and no boolean covers the new domain). The script
+  installs a three-rule local module. Do not "fix" this in `sshd_config` —
+  `AllowTcpForwarding` is already `yes` and the denial happens after sshd has
+  agreed to the forward; and do not use the `nis_enabled` boolean `audit2allow`
+  suggests, which grants port-connect across many domains. The policy is
+  written out as source in the script rather than generated from the audit log,
+  because a box nobody has connected to yet has no denials to generate it from.
+
 - **`postinstall.sh` runs first on a clean system, always.** "post install" means
   after installing the *operating system*, not after installing software — the
   name misreads easily. It is what closes the box, so everything that opens ports
@@ -146,4 +159,7 @@ still what `openSUSE/shell.sh` uses. The two are deliberately different.
   volume), shell, apps** — `storage.sh` before `apps.sh` because the package
   manager stores live inside that volume, and `shell.sh` before `apps.sh` so the
   rest of the setup is driven from a shell that is already zsh.
+  `fix-ssh.sh` is deliberately **outside** this order and is called by nothing:
+  it changes system SELinux policy, which is a decision to take knowingly, on a
+  box that needs port forwarding — never a side effect of another script.
 - `fedora/postinstall.sh` assumes a headless box reached over SSH, so the order in `main()` matters: firewalld is installed, unmasked, allowed the `ssh` service in the default zone and reloaded **before** `remove_ufw` takes the old firewall away. Every zone Fedora ships already permits `ssh`, so bringing firewalld up cannot cut a live session. A non-default sshd port is opened explicitly, since the `ssh` service definition only covers 22.

@@ -32,7 +32,19 @@ if [[ ! -d ~/.ssh ]]; then
 fi
 
 # Create temporary directory
+#
+# Everything below is written in here, including the *plaintext* archive of
+# ~/.ssh before it is encrypted, so the directory must not outlive the script —
+# not on an error, and above all not on a Ctrl-C at the GPG passphrase prompt.
+# One trap replaces the rm -rf that used to be copy-pasted into every exit path.
 TEMP_DIR=$(mktemp -d)
+
+cleanup_temp_dir() {
+    [[ -n "${TEMP_DIR:-}" ]] && rm -rf "$TEMP_DIR"
+    return 0
+}
+trap cleanup_temp_dir EXIT
+
 log_info "Created temporary directory: $TEMP_DIR"
 
 # Archive name with timestamp
@@ -55,7 +67,6 @@ gpg --symmetric --cipher-algo AES256 --output "${TEMP_DIR}/${ENCRYPTED_NAME}" "$
 
 if [[ ! -f "${TEMP_DIR}/${ENCRYPTED_NAME}" ]]; then
     log_error "Encryption failed"
-    rm -rf "$TEMP_DIR"
     exit 1
 fi
 
@@ -70,7 +81,6 @@ GIST_URL=$(gh gist create "${TEMP_DIR}/${ENCODED_NAME}" --desc "SSH Backup ${TIM
 
 if [[ -z "$GIST_URL" ]]; then
     log_error "Failed to create Gist"
-    rm -rf "$TEMP_DIR"
     exit 1
 fi
 
@@ -106,10 +116,6 @@ echo ""
 echo "======================================"
 echo ""
 log_warning "Save the restore command and remember your passphrase!"
-
-# Cleanup
-rm -rf "$TEMP_DIR"
-log_info "Temporary files cleaned up"
 
 echo ""
 log_success "Done!"

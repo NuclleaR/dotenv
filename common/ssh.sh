@@ -2,7 +2,12 @@
 
 # SSH setup: key generation, agent, client config and GitHub wiring.
 #
-# Distribution independent: only ssh-keygen, ssh-add, ssh-keyscan and optionally
+# It never writes ~/.ssh/known_hosts. Seeding it from ssh-keyscan trusts
+# whatever the network answers, and appending to a file whose last line has no
+# newline corrupts the entry that was already there. Confirming a host key is
+# the user's decision, taken against a fingerprint ssh prints.
+#
+# Distribution independent: only ssh-keygen, ssh-add and optionally
 # keychain are used, and nothing is ever installed from here, so it runs the
 # same anywhere. The passphrase is always asked for interactively; it is never
 # taken from a file or an argument.
@@ -22,9 +27,6 @@ SSH_DIR="$HOME/.ssh"
 KEY_NAME="id_ed25519"
 HOST_ALIAS="github.com"
 KEY_COMMENT=""
-
-# Hosts seeded into known_hosts so the first clone does not stop on a prompt
-KNOWN_HOSTS_SEED=(github.com gitlab.com)
 
 # Set once the key is known to be on the account (gh uploaded it, or it was
 # already there) and once the manual instructions have been printed. The
@@ -83,9 +85,8 @@ ensure_ssh_dir() {
     for file in "$SSH_DIR"/*; do
         [[ -f "$file" ]] || continue
         case "$file" in
-            *.pub)                              chmod 644 "$file" ;;
-            "$SSH_DIR/known_hosts"|"$SSH_DIR/config") chmod 600 "$file" ;;
-            *)                                  chmod 600 "$file" ;;
+            *.pub) chmod 644 "$file" ;;
+            *)     chmod 600 "$file" ;;
         esac
     done
 
@@ -200,10 +201,28 @@ setup_agent() {
     fi
 }
 
+# Which clone URLs the block just written actually works for. Worth saying out
+# loud: an alias that only covers itself is exactly the setup where ssh -T
+# succeeds and git clone fails.
+log_clone_url_hint() {
+    [[ "$HOST_ALIAS" == "github.com" ]] && return 0
+    log_info "Clone with either git@$HOST_ALIAS:owner/repo or git@github.com:owner/repo — both use $KEY_NAME"
+    return 0
+}
+
 # Write the dotenv block into ~/.ssh/config. Everything outside the markers is
 # left untouched, so hand-written host entries survive.
 configure_ssh_config() {
     local CONFIG="$SSH_DIR/config"
+
+    # The alias has to cover the real host name as well. IdentitiesOnly in
+    # "Host *" means ssh offers only the identities a matching block names, and
+    # a plain git@github.com URL matches no block — so ssh falls back to the
+    # default key names, never to $KEY_NAME, and the clone fails with
+    # "Permission denied (publickey)" even though the alias authenticates fine.
+    local HOST_LINE="Host $HOST_ALIAS"
+    [[ "$HOST_ALIAS" == "github.com" ]] || HOST_LINE="Host $HOST_ALIAS github.com"
+
     local BLOCK
     BLOCK="$(cat <<EOF
 $CONFIG_BEGIN
@@ -213,7 +232,7 @@ Host *
     ServerAliveInterval 60
     ServerAliveCountMax 3
 
-Host $HOST_ALIAS
+$HOST_LINE
     HostName github.com
     User git
     IdentityFile $SSH_DIR/$KEY_NAME
@@ -226,6 +245,7 @@ EOF
         printf '%s\n' "$BLOCK" > "$CONFIG"
         chmod 600 "$CONFIG"
         log_success "$CONFIG created"
+        log_clone_url_hint
         return 0
     fi
 
@@ -249,11 +269,17 @@ EOF
 
         local TMP
         TMP="$(mktemp)"
-        awk -v begin="$CONFIG_BEGIN" -v end="$CONFIG_END" -v block="$BLOCK" '
+        # An unchecked awk would leave both the temp file and a half-rewritten
+        # config behind, and ~/.ssh/config is not a file to lose.
+        if ! awk -v begin="$CONFIG_BEGIN" -v end="$CONFIG_END" -v block="$BLOCK" '
             $0 == begin { print block; skip = 1; next }
             $0 == end   { skip = 0; next }
             !skip
-        ' "$CONFIG" > "$TMP"
+        ' "$CONFIG" > "$TMP"; then
+            rm -f "$TMP"
+            log_error "Could not rewrite the dotenv block — $CONFIG is unchanged, backup at $BACKUP"
+            return 1
+        fi
         mv "$TMP" "$CONFIG"
     else
         log_info "Appending the dotenv block to $CONFIG..."
@@ -261,34 +287,8 @@ EOF
     fi
 
     chmod 600 "$CONFIG"
-    log_success "$CONFIG updated (Host $HOST_ALIAS -> $KEY_NAME)"
-}
-
-# Pre-seed known_hosts so the first git clone does not stop on a yes/no prompt.
-# This trusts whatever the network answers right now — see the warning below.
-seed_known_hosts() {
-    local KNOWN_HOSTS="$SSH_DIR/known_hosts"
-    touch "$KNOWN_HOSTS"
-
-    local HOST
-    for HOST in "${KNOWN_HOSTS_SEED[@]}"; do
-        # -f is required: without it ssh-keygen resolves known_hosts from the
-        # passwd entry, not from $HOME, and would check the wrong file
-        if ssh-keygen -F "$HOST" -f "$KNOWN_HOSTS" >/dev/null 2>&1; then
-            log_success "$HOST already in known_hosts"
-            continue
-        fi
-
-        log_info "Fetching host keys for $HOST..."
-        if ssh-keyscan -t ed25519,rsa "$HOST" >> "$KNOWN_HOSTS" 2>/dev/null; then
-            log_success "$HOST added to known_hosts"
-        else
-            log_warning "ssh-keyscan failed for $HOST"
-        fi
-    done
-
-    chmod 600 "$KNOWN_HOSTS"
-    log_warning "known_hosts was seeded from the network — verify github.com against https://docs.github.com/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints"
+    log_success "$CONFIG updated ($HOST_LINE -> $KEY_NAME)"
+    log_clone_url_hint
 }
 
 # Copy stdin to the clipboard when the session has one. A headless box reached
@@ -422,7 +422,10 @@ test_github_connection() {
     log_info "Testing the connection to $HOST_ALIAS..."
 
     local OUTPUT
-    OUTPUT="$(ssh -T -o StrictHostKeyChecking=accept-new "git@$HOST_ALIAS" 2>&1)" || true
+    # No StrictHostKeyChecking override: whether an unknown host key is
+    # accepted is the user's call, made against a fingerprint ssh shows them,
+    # and this script must never write to ~/.ssh/known_hosts on their behalf.
+    OUTPUT="$(ssh -T "git@$HOST_ALIAS" 2>&1)" || true
 
     if grep -q "successfully authenticated" <<<"$OUTPUT"; then
         log_success "${OUTPUT}"
@@ -441,7 +444,15 @@ test_github_connection() {
 
     # Network and host-key failures say nothing about the key, so printing it
     # would only be noise.
-    if grep -qE "Could not resolve hostname|Connection timed out|Network is unreachable|Connection refused|Host key verification failed" <<<"$OUTPUT"; then
+    if grep -qF "Host key verification failed" <<<"$OUTPUT"; then
+        log_warning "$HOST_ALIAS is not in ~/.ssh/known_hosts yet:"
+        log_warning "    $OUTPUT"
+        log_info "Run 'ssh -T git@$HOST_ALIAS' yourself and compare the fingerprint against"
+        log_info "https://docs.github.com/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints"
+        return 0
+    fi
+
+    if grep -qE "Could not resolve hostname|Connection timed out|Network is unreachable|Connection refused" <<<"$OUTPUT"; then
         log_warning "Could not reach $HOST_ALIAS — this is not a key problem:"
         log_warning "    $OUTPUT"
         log_info "Re-check when the network is back: ssh -T git@$HOST_ALIAS"
@@ -460,7 +471,6 @@ main() {
     generate_ssh_key
     setup_agent
     configure_ssh_config
-    seed_known_hosts
     upload_key_to_github
 
     echo ""
