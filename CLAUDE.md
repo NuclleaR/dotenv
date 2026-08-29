@@ -30,7 +30,7 @@ HOME="$SB" bash -c 'source …; command_exists() { [[ "$1" != curl ]]; }; instal
 HOME="$SB" bash -c 'source …; getent() { echo "u:x:1000:1000::/home/u:/bin/bash"; }; show_default_shell_hint'
 ```
 
-Entry points that can be executed directly: `./openSUSE/shell.sh`, `./fedora/shell.sh`, `./fedora/postinstall.sh`, `./common/rust.sh`, `./common/ssh.sh`, `./common/gpg.sh`, `./arch/drivers.sh`, `./arch/zram.sh <setup|disable|stats>`, `./kde/keyboard.sh`. `./arch.sh` and `./ubuntu/bootstrap.sh` are flag dispatchers — run them with `-h` for the list of installable names. Both take `-i <name>` (install one thing), `-a` (everything) and `-v` (print versions); arch additionally has `-u` for a system update, while ubuntu spells that `-i upd`.
+Entry points that can be executed directly: `./openSUSE/shell.sh`, `./fedora/shell.sh`, `./fedora/postinstall.sh`, `./common/rust.sh`, `./common/ssh.sh`, `./fedora/ssh.sh` (installs keychain, then runs `common/ssh.sh`), `./common/gpg.sh`, `./arch/drivers.sh`, `./arch/zram.sh <setup|disable|stats>`, `./kde/keyboard.sh`. `./arch.sh` and `./ubuntu/bootstrap.sh` are flag dispatchers — run them with `-h` for the list of installable names. Both take `-i <name>` (install one thing), `-a` (everything) and `-v` (print versions); arch additionally has `-u` for a system update, while ubuntu spells that `-i upd`.
 
 ## Architecture
 
