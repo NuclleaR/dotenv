@@ -411,6 +411,16 @@ install_cargo_apps() {
     done
 }
 
+# Temp dir holding the font tarball; global so the EXIT trap can still reach it
+# after install_fonts has returned.
+FONT_TMP=""
+
+cleanup_font_tmp() {
+    [[ -n "$FONT_TMP" ]] && rm -rf "$FONT_TMP"
+    FONT_TMP=""
+    return 0
+}
+
 # Nerd Fonts are not in the Fedora repositories, so take the release tarball
 install_fonts() {
     local FONT_DIR="$HOME/.local/share/fonts/$NERD_FONT"
@@ -426,20 +436,27 @@ install_fonts() {
         return 1
     fi
 
-    local TMP
-    TMP="$(mktemp -d)"
+    # The trap is what makes this safe: Ctrl-C during a font download used to
+    # leave the tarball behind in /tmp, and so did a tar that could not read it.
+    FONT_TMP="$(mktemp -d)"
+    trap cleanup_font_tmp EXIT
+    local TMP="$FONT_TMP"
 
     log_info "Downloading $NERD_FONT Nerd Font..."
     if ! curl -fsSL "$URL" -o "$TMP/font.tar.xz"; then
         log_error "Could not download $URL"
         log_info "Check the name against https://github.com/ryanoasis/nerd-fonts/releases"
-        rm -rf "$TMP"
+        cleanup_font_tmp
         return 1
     fi
 
     mkdir -p "$FONT_DIR"
-    tar -xJf "$TMP/font.tar.xz" -C "$FONT_DIR"
-    rm -rf "$TMP"
+    if ! tar -xJf "$TMP/font.tar.xz" -C "$FONT_DIR"; then
+        log_error "Could not unpack the $NERD_FONT archive"
+        cleanup_font_tmp
+        return 1
+    fi
+    cleanup_font_tmp
 
     if command_exists fc-cache; then
         fc-cache -f "$FONT_DIR" >/dev/null

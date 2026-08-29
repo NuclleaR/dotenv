@@ -131,6 +131,17 @@ link_runtime_dir() {
     log_success "$TARGET -> $SOURCE"
 }
 
+# The .tmp a download is writing to right now. curl leaves a partial file
+# behind when it is interrupted, and ~/.shell is a config directory, not a
+# scratch one — so the EXIT trap sweeps it.
+PARTIAL_DOWNLOAD=""
+
+cleanup_partial_download() {
+    [[ -n "$PARTIAL_DOWNLOAD" ]] && rm -f "$PARTIAL_DOWNLOAD"
+    PARTIAL_DOWNLOAD=""
+    return 0
+}
+
 # Fetch one runtime file from GitHub into ~/.shell
 download_runtime_file() {
     local REL="$1"
@@ -142,13 +153,16 @@ download_runtime_file() {
     [[ -L "$TARGET" ]] && rm -f "$TARGET"
 
     log_info "Downloading $REL..."
+    PARTIAL_DOWNLOAD="$TARGET.tmp"
+    trap cleanup_partial_download EXIT
     if ! curl -fsSL "$RAW_BASE/$REL" -o "$TARGET.tmp"; then
         log_error "Failed to download $RAW_BASE/$REL"
-        rm -f "$TARGET.tmp"
+        cleanup_partial_download
         return 1
     fi
 
     mv "$TARGET.tmp" "$TARGET"
+    PARTIAL_DOWNLOAD=""
     log_success "$REL"
 }
 

@@ -234,6 +234,17 @@ install_bat() {
     fi
 }
 
+# Scratch dir for the two installers that download an archive. Global so the
+# EXIT trap can reach it, cleared by the cleanup so a second use cannot remove
+# a directory that is gone already.
+DOWNLOAD_TMP=""
+
+cleanup_download_tmp() {
+    [[ -n "$DOWNLOAD_TMP" ]] && rm -rf "$DOWNLOAD_TMP"
+    DOWNLOAD_TMP=""
+    return 0
+}
+
 # Install eza (better ls)
 install_eza() {
     log_info "Installing eza (better ls)..."
@@ -242,11 +253,16 @@ install_eza() {
         # Install from GitHub releases since eza might not be in Fedora repos
         local latest_url=$(curl -s https://api.github.com/repos/eza-community/eza/releases/latest | grep "browser_download_url.*x86_64-unknown-linux-gnu.tar.gz" | cut -d '"' -f 4)
         if [[ -n "$latest_url" ]]; then
-            cd /tmp
-            wget "$latest_url" -O eza.tar.gz
-            tar -xzf eza.tar.gz
-            sudo mv eza /usr/local/bin/
-            rm eza.tar.gz
+            # A scratch dir the EXIT trap owns, not a fixed name under /tmp:
+            # a failed wget or tar must not leave the archive behind, and
+            # nothing here may change the cwd of everything that follows.
+            DOWNLOAD_TMP="$(mktemp -d)"
+            trap cleanup_download_tmp EXIT
+
+            wget "$latest_url" -O "$DOWNLOAD_TMP/eza.tar.gz"
+            tar -xzf "$DOWNLOAD_TMP/eza.tar.gz" -C "$DOWNLOAD_TMP"
+            sudo mv "$DOWNLOAD_TMP/eza" /usr/local/bin/
+            cleanup_download_tmp
             log_success "eza installed"
         else
             log_warning "Could not download eza, skipping..."
@@ -547,24 +563,27 @@ install_warp() {
     if ! command_exists warp-terminal; then
         # Download and install Warp RPM package directly (as per official docs)
         log_info "Downloading Warp RPM package..."
-        cd /tmp
+        # Same scratch-dir rule as install_eza: an interrupted curl leaves a
+        # partial RPM, and it has to disappear with the directory.
+        DOWNLOAD_TMP="$(mktemp -d)"
+        trap cleanup_download_tmp EXIT
+        local RPM="$DOWNLOAD_TMP/warp.rpm"
 
         # Use curl with redirect following to properly download the RPM
-        if curl -L "https://app.warp.dev/download?package=rpm" -o warp.rpm; then
+        if curl -L "https://app.warp.dev/download?package=rpm" -o "$RPM"; then
             # Verify it's actually an RPM file
-            if file warp.rpm | grep -q "RPM"; then
+            if file "$RPM" | grep -q "RPM"; then
                 # Install Warp from downloaded RPM
                 log_info "Installing Warp from RPM package..."
-                sudo dnf install -y ./warp.rpm
+                sudo dnf install -y "$RPM"
                 log_success "Warp terminal installed"
             else
                 log_warning "Downloaded file is not a valid RPM package, skipping Warp installation"
             fi
-            # Cleanup
-            rm -f warp.rpm
         else
             log_warning "Failed to download Warp RPM package, skipping installation"
         fi
+        cleanup_download_tmp
     else
         log_success "Warp terminal already installed"
     fi

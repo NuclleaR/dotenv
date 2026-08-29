@@ -26,6 +26,14 @@ KEY_COMMENT=""
 # Hosts seeded into known_hosts so the first clone does not stop on a prompt
 KNOWN_HOSTS_SEED=(github.com gitlab.com)
 
+# Set once the key is known to be on the account (gh uploaded it, or it was
+# already there) and once the manual instructions have been printed. The
+# connection test reads both: they are what separates "GitHub never got this
+# key" from "GitHub has it and still refuses it", and they keep the key from
+# being printed twice in one run.
+KEY_ON_GITHUB=false
+MANUAL_UPLOAD_SHOWN=false
+
 # Markers delimiting the block this script owns inside ~/.ssh/config
 CONFIG_BEGIN="# >>> dotenv managed >>>"
 CONFIG_END="# <<< dotenv managed <<<"
@@ -326,6 +334,7 @@ show_key_for_manual_upload() {
     fi
 
     log_info "Once it is added, verify with: ssh -T git@$HOST_ALIAS"
+    MANUAL_UPLOAD_SHOWN=true
 }
 
 # Upload the public key to GitHub with gh, skipping if it is already there.
@@ -348,16 +357,64 @@ upload_key_to_github() {
 
     if gh ssh-key list 2>/dev/null | grep -qF "$KEY_BODY"; then
         log_success "Key already uploaded to GitHub"
+        KEY_ON_GITHUB=true
         return 0
     fi
 
     log_info "Uploading the public key to GitHub..."
     if gh ssh-key add "$SSH_DIR/$KEY_NAME.pub" --title "$(hostname)"; then
         log_success "Key uploaded to GitHub as '$(hostname)'"
+        KEY_ON_GITHUB=true
     else
         log_warning "gh ssh-key add failed"
         show_key_for_manual_upload
     fi
+}
+
+# What to do about "Permission denied (publickey)". Everything local is already
+# correct at this point, so the answer is never a stack trace: either the key
+# was never offered, or GitHub has not been given it yet.
+explain_publickey_denial() {
+    # A key that is not in the agent fails exactly like a key GitHub does not
+    # know, so rule that out before blaming the account.
+    local IN_AGENT=true
+    local FPR
+    FPR="$(ssh-keygen -lf "$SSH_DIR/$KEY_NAME.pub" 2>/dev/null | awk '{print $2}')"
+    if [[ -n "$FPR" ]] && ! ssh-add -l 2>/dev/null | grep -qF "$FPR"; then
+        IN_AGENT=false
+        log_warning "$KEY_NAME is not loaded in the agent, so ssh may never have offered it"
+        log_info "Load it and try again: keychain --quiet ~/.ssh/$KEY_NAME   (or: ssh-add ~/.ssh/$KEY_NAME)"
+    fi
+
+    # gh says the key is on the account, yet this host still refuses it: the
+    # account it went to is not the one this alias authenticates against.
+    if [[ "$KEY_ON_GITHUB" == true ]]; then
+        log_warning "gh reports the key is on the account it is logged into, but $HOST_ALIAS still refused it"
+        log_info "Two usual reasons:"
+        log_info "  1. the key landed on a different account than the one $HOST_ALIAS is for"
+        log_info "  2. the organisation enforces SAML SSO — authorize the key at https://github.com/settings/keys"
+        return 0
+    fi
+
+    # Only true when the agent check above found nothing wrong; otherwise it
+    # would contradict the warning it just printed.
+    [[ "$IN_AGENT" == true ]] &&
+        log_info "Nothing local is broken — GitHub has simply never been given this key"
+
+    if [[ "$HOST_ALIAS" != "github.com" ]]; then
+        # ssh reports the real host, so the error names github.com even though
+        # the alias does not. That reads like a bug and is not one.
+        log_info "Host $HOST_ALIAS maps to HostName github.com, which is why the error above names github.com"
+        log_info "It is still a separate identity: the key has to be on the account $HOST_ALIAS is for, not necessarily the one gh is logged into"
+    fi
+
+    # The key was already printed once this run; do not paste it a second time.
+    if [[ "$MANUAL_UPLOAD_SHOWN" == true ]]; then
+        log_info "Add the key printed above at https://github.com/settings/keys, then re-check with: ssh -T git@$HOST_ALIAS"
+        return 0
+    fi
+
+    show_key_for_manual_upload
 }
 
 # GitHub answers with exit code 1 even on success, so match on the greeting
@@ -369,10 +426,31 @@ test_github_connection() {
 
     if grep -q "successfully authenticated" <<<"$OUTPUT"; then
         log_success "${OUTPUT}"
-    else
-        log_warning "Could not authenticate to $HOST_ALIAS:"
-        log_warning "    $OUTPUT"
+        return 0
     fi
+
+    # The expected ending of a first run without gh: the setup is complete and
+    # correct, GitHub has simply never seen this key. Say that, and hand over
+    # the manual path — do not leave the raw ssh error as the last word.
+    if grep -qF "Permission denied (publickey)" <<<"$OUTPUT"; then
+        log_warning "$HOST_ALIAS refused the key: Permission denied (publickey)"
+        echo ""
+        explain_publickey_denial
+        return 0
+    fi
+
+    # Network and host-key failures say nothing about the key, so printing it
+    # would only be noise.
+    if grep -qE "Could not resolve hostname|Connection timed out|Network is unreachable|Connection refused|Host key verification failed" <<<"$OUTPUT"; then
+        log_warning "Could not reach $HOST_ALIAS — this is not a key problem:"
+        log_warning "    $OUTPUT"
+        log_info "Re-check when the network is back: ssh -T git@$HOST_ALIAS"
+        return 0
+    fi
+
+    log_warning "Could not authenticate to $HOST_ALIAS:"
+    log_warning "    $OUTPUT"
+    log_info "Re-check with: ssh -T git@$HOST_ALIAS"
 }
 
 main() {
