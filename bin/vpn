@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+
+# vpn — a small wrapper around the tailscale CLI.
+#
+# The tailscale commands are fine on their own; what this saves is remembering
+# which of them want root, where the Mac App Store build hides the binary, and
+# that a machine should join a tailnet under its own short hostname instead of
+# whatever Tailscale guesses from the system name.
+#
+# Installed into ~/.local/bin by bin/install.sh, and it runs from there with no
+# repo next to it — hence the inline log helpers, as in fedora/apps.sh.
+
+set -euo pipefail
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+log_info()    { echo -e "${BLUE}[INFO]${NC} $1"; }
+log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
+log_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
+log_error()   { echo -e "${RED}[ERROR]${NC} $1"; }
+
+# On Linux and for the standalone macOS build the CLI is on PATH; the Mac App
+# Store build keeps it inside the bundle. https://tailscale.com/kb/1080/cli
+find_tailscale() {
+    if command -v tailscale >/dev/null 2>&1; then
+        command -v tailscale
+        return 0
+    fi
+
+    local CANDIDATE
+    for CANDIDATE in \
+        /usr/local/bin/tailscale \
+        /Applications/Tailscale.app/Contents/MacOS/Tailscale; do
+        if [[ -x "$CANDIDATE" ]]; then
+            echo "$CANDIDATE"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+usage() {
+    cat <<EOF
+vpn — wrapper around the tailscale CLI
+
+Usage:
+  vpn up                 connect this machine to its tailnet
+  vpn down               disconnect, leaving the daemon running
+  vpn status             who is on the tailnet, and how each peer is reached
+  vpn join [name]        join a tailnet, naming this node (default: $(hostname -s))
+  vpn ls                 the accounts this machine is logged into
+  vpn switch <account>   move to another tailnet
+  vpn ip                 this machine's tailnet addresses
+  vpn help               this help
+
+A machine can only carry traffic for one tailnet at a time, so a laptop that
+belongs to both a work and a personal tailnet uses "ls" and "switch" to move
+between them. https://tailscale.com/kb/1225/fast-user-switching
+EOF
+}
+
+main() {
+    local TS
+    if ! TS="$(find_tailscale)"; then
+        log_error "tailscale is not installed"
+        log_info "Fedora: fedora/apps.sh -i tailscale"
+        log_info "macOS:  https://tailscale.com/download/mac"
+        return 1
+    fi
+
+    # Everything that changes state wants root on Linux, unless the daemon was
+    # handed to this user with `tailscale set --operator=\$USER`. macOS needs
+    # none of it.
+    local SUDO=""
+    if [[ "$(uname -s)" == "Linux" && "$(id -u)" -ne 0 ]]; then
+        SUDO="sudo"
+    fi
+
+    local CMD="${1:-help}"
+    shift || true
+
+    case "$CMD" in
+        up)
+            $SUDO "$TS" up --accept-routes "$@"
+            ;;
+        down)
+            $SUDO "$TS" down "$@"
+            ;;
+        status | st)
+            "$TS" status "$@"
+            ;;
+        join)
+            local NAME="${1:-$(hostname -s)}"
+            log_info "Joining as \"$NAME\" — the first time this prints a login URL"
+            $SUDO "$TS" up --accept-routes --hostname="$NAME"
+            log_success "up as \"$NAME\""
+            log_warning "On a box you reach only over the tailnet, disable key expiry for"
+            log_warning "this node in the admin console, or it drops off in 180 days"
+            ;;
+        ls)
+            $SUDO "$TS" switch --list
+            ;;
+        switch | sw)
+            if [[ $# -eq 0 ]]; then
+                log_error "Which account? See: vpn ls"
+                return 1
+            fi
+            $SUDO "$TS" switch "$@"
+            ;;
+        ip)
+            "$TS" ip "$@"
+            ;;
+        help | -h | --help)
+            usage
+            ;;
+        *)
+            log_error "Unknown command: $CMD"
+            echo ""
+            usage
+            return 1
+            ;;
+    esac
+}
+
+if [[ -z "${BASH_SOURCE[0]:-}" || "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main "$@"
+fi

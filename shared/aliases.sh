@@ -100,10 +100,3 @@ alias ...='cd ../..'
 alias ....='cd ../../..'
 
 alias zz="source ~/.zshrc"
-
-# VPN aliases
-if command -v tailscale >/dev/null; then
-    alias vpnu='sudo tailscale up --accept-routes'
-    alias vpnd='sudo tailscale down'
-    alias vpns='sudo tailscale status'
-fi
