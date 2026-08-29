@@ -178,14 +178,20 @@ show_status() {
 
     command_exists getenforce && log_info "SELinux: $(getenforce)"
 
-    log_info "Recent sshd-session denials (empty is what you want):"
-    if command_exists ausearch; then
-        sudo ausearch -m avc -ts today -c sshd-session 2>/dev/null |
-            grep -c "denied" |
-            xargs -I{} log_info "    {} denial(s) logged today"
-    else
-        log_warning "    ausearch not installed (package: audit)"
+    if ! command_exists ausearch; then
+        log_warning "ausearch not installed (package: audit) — cannot count denials"
+        return 0
     fi
+
+    # Both halves report "nothing found" with exit 1 — ausearch when the log has
+    # no matching event, grep -c when the count is zero — and under pipefail that
+    # would make the healthiest possible answer look like a failure. The count
+    # goes through a variable rather than a pipe into a logger, because the
+    # log_* helpers are shell functions and xargs can only exec real binaries.
+    local DENIALS
+    DENIALS="$(sudo ausearch -m avc -ts today -c sshd-session 2>/dev/null | grep -c denied || true)"
+    log_info "sshd-session denials logged today: ${DENIALS:-0}  (0 is what you want)"
+    return 0
 }
 
 remove_module() {
