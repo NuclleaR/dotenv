@@ -21,7 +21,9 @@
 # a shell there is no script path to resolve a sibling file from. Keep them in
 # step with common/logger.sh.
 #
-# All flags are passed through to common/ssh.sh; run with -h for the list.
+# All flags are passed through to common/ssh.sh; run with -h for the list. -h is
+# intercepted before anything is installed, so asking for the usage never calls
+# dnf.
 
 set -euo pipefail
 
@@ -68,11 +70,17 @@ REPO_ROOT=""
 detect_repo_root() {
     [[ -n "${BASH_SOURCE[0]:-}" ]] || return 0
 
-    local script_dir
+    local script_dir root file
     script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    if [[ -f "$script_dir/../common/ssh.sh" ]]; then
-        REPO_ROOT="$(cd "$script_dir/.." && pwd)"
-    fi
+    root="$(cd "$script_dir/.." && pwd)"
+
+    # A partial checkout is worse than no clone at all: common/ssh.sh sources
+    # its siblings, so all of them have to be there before we prefer the clone.
+    for file in "${COMMON_FILES[@]}"; do
+        [[ -f "$root/$file" ]] || return 0
+    done
+
+    REPO_ROOT="$root"
 }
 
 # keychain is the only piece common/ssh.sh wants that Fedora does not ship by
@@ -81,6 +89,11 @@ install_keychain() {
     if command_exists keychain; then
         log_success "keychain already installed"
         return 0
+    fi
+
+    if ! command_exists dnf; then
+        log_error "dnf not found — this script only installs on Fedora"
+        return 1
     fi
 
     log_info "Installing keychain..."
@@ -109,11 +122,17 @@ TMP_ROOT=""
 
 cleanup_tmp_root() {
     [[ -n "$TMP_ROOT" ]] && rm -rf "$TMP_ROOT"
+    return 0
 }
 
 # Fetch common/ into TMP_ROOT, keeping the layout common/ssh.sh resolves its
 # siblings from.
 download_common() {
+    if ! command_exists curl; then
+        log_error "curl is required to fetch common/ — install it with: sudo dnf install -y curl"
+        return 1
+    fi
+
     TMP_ROOT="$(mktemp -d)"
     trap cleanup_tmp_root EXIT
     mkdir -p "$TMP_ROOT/common"
@@ -141,22 +160,45 @@ run_ssh_setup() {
     bash "$root/common/ssh.sh" "$@" < /dev/tty
 }
 
+# -h anywhere in the arguments means "print the usage and touch nothing"
+wants_help() {
+    local arg
+    for arg in "$@"; do
+        [[ "$arg" == "-h" || "$arg" == "--help" ]] && return 0
+    done
+    return 1
+}
+
 main() {
     detect_repo_root
 
-    install_keychain
-    hint_gh
-    echo ""
+    local help=0
+    wants_help "$@" && help=1
 
-    if [[ -n "$REPO_ROOT" ]]; then
-        run_ssh_setup "$REPO_ROOT" "$@"
+    if (( ! help )); then
+        # keychain is an optimisation, not a requirement — common/ssh.sh falls
+        # back to the plain ssh-agent — so a failed install must not take the
+        # whole SSH setup down with it under set -e.
+        install_keychain || log_warning "Continuing without keychain — the plain ssh-agent will be used"
+        hint_gh
+        echo ""
+    fi
+
+    local root="$REPO_ROOT"
+    if [[ -z "$root" ]]; then
+        download_common || return 1
+        root="$TMP_ROOT"
+        echo ""
+    fi
+
+    # The usage text lives in common/ssh.sh; print it from there rather than
+    # keeping a second copy in step. No terminal is needed for that.
+    if (( help )); then
+        bash "$root/common/ssh.sh" -h
         return
     fi
 
-    download_common || return 1
-
-    echo ""
-    run_ssh_setup "$TMP_ROOT" "$@"
+    run_ssh_setup "$root" "$@"
 }
 
 # Piped into a shell BASH_SOURCE[0] is empty and $0 is "bash", so the plain

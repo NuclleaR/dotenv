@@ -97,10 +97,11 @@ Usage:
   -h          this help
 
 Names:
-  base        Development Tools group, curl, git
+  base        Development Tools group, gcc-c++, make, curl, git
   cli         ${CLI_PACKAGES[*]}
   podman      podman, podman-compose
   gh          GitHub CLI
+  tailscale   Tailscale VPN client
   starship    official install script
   mise        official install script
   rust        rustup, with --no-modify-path
@@ -112,7 +113,7 @@ Environment:
 EOF
 }
 
-ALL_TARGETS=(base cli podman gh starship mise rust cargo-apps fonts)
+ALL_TARGETS=(base cli podman gh tailscale starship mise rust cargo-apps fonts)
 
 list_targets() {
     printf '%s\n' "${ALL_TARGETS[@]}"
@@ -173,6 +174,13 @@ install_base() {
     sudo dnf group install -y development-tools ||
         sudo dnf groupinstall -y "Development Tools" ||
         log_warning "Could not install the Development Tools group"
+
+    # The group is not a C toolchain on its own: recent Fedora releases leave the
+    # compiler out of it, and anything with a native module (node-pty, most
+    # node-gyp packages, cc-rs crates) then fails to build. gcc-c++ pulls gcc and
+    # glibc-devel along with it, so those two names cover the whole toolchain.
+    install_dnf gcc-c++ g++
+    install_dnf make
 
     install_dnf curl
     install_dnf git
@@ -262,6 +270,54 @@ install_gh() {
     else
         log_info "Open a new shell to pick gh up"
     fi
+}
+
+install_tailscale() {
+    if command_exists tailscale; then
+        log_success "tailscale already installed"
+        log_info "tailscale version: $(tailscale --version | head -n1)"
+    else
+        # Their script, not a copy of its steps: it already handles dnf4 vs
+        # dnf5, adds the repository and enables the daemon, and it keeps
+        # working when Tailscale changes any of that. Same reasoning as
+        # starship and mise above. https://tailscale.com/download/linux/fedora
+        log_info "Installing tailscale from the official install script..."
+        if ! curl -fsSL https://tailscale.com/install.sh | sh; then
+            log_error "Failed to install tailscale"
+            return 1
+        fi
+
+        log_success "tailscale installed"
+    fi
+
+    # The installer enables tailscaled itself, but this box is reached over the
+    # tailnet, so it is worth being sure rather than assuming.
+    if systemctl is-active tailscaled >/dev/null 2>&1 &&
+        systemctl is-enabled tailscaled >/dev/null 2>&1; then
+        log_success "tailscaled enabled and running"
+    else
+        log_info "Enabling tailscaled..."
+        sudo systemctl enable --now tailscaled
+        log_success "tailscaled enabled"
+    fi
+
+    # Joining a tailnet is a decision, not an installation step: it opens a
+    # browser login and picks which tailnet this machine belongs to. Their
+    # installer stops here too.
+    if tailscale status >/dev/null 2>&1; then
+        log_success "already joined a tailnet"
+        return 0
+    fi
+
+    log_warning "tailscale is installed but has not joined a tailnet yet"
+    log_info "Finish it by hand — it prints a URL to open in a browser:"
+    echo ""
+    echo "    sudo tailscale up --hostname=$(hostname -s)"
+    echo ""
+    log_info "Then two things that are easy to forget on a headless box:"
+    log_info "  1. disable key expiry for this node in the Tailscale admin console,"
+    log_info "     or it drops off the tailnet in 180 days and takes remote access with it"
+    log_info "  2. re-run fedora/postinstall.sh, so firewalld puts tailscale0 in the trusted zone"
 }
 
 install_starship() {
@@ -395,7 +451,8 @@ install_fonts() {
 print_versions() {
     local PAIRS=(
         "bat:bat" "eza:eza" "zoxide:zoxide" "fd:fd" "rg:rg" "delta:delta"
-        "jq:jq" "podman:podman" "gh:gh" "starship:starship" "mise:mise"
+        "jq:jq" "podman:podman" "gh:gh" "tailscale:tailscale"
+        "starship:starship" "mise:mise" "g++:g++" "make:make"
         "rustc:rustc" "cargo:cargo" "sk:sk" "dust:dust" "rip:rip"
     )
 
@@ -418,6 +475,7 @@ run_target() {
         cli)        install_cli ;;
         podman)     install_podman ;;
         gh)         install_gh ;;
+        tailscale)  install_tailscale ;;
         starship)   install_starship ;;
         mise)       install_mise ;;
         rust)       install_rust ;;

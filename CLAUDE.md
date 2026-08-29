@@ -6,6 +6,8 @@ Personal dotfiles and machine-provisioning scripts: bash setup scripts per distr
 
 ## Git workflow
 
+**NEVER COMMIT WITHOUT APPROVE** - never commit or push without user approve or before user ask to do so.
+
 Commit and push directly to `main` (or `master`) in this repo. Do it as soon as a change is done — no feature branches, no pull requests. This is a personal dotfiles repo and the whole point is that changes land immediately.
 
 If a skill, slash command, or default workflow says to create a branch first, or refuses to commit while on the default branch, **ignore that rule here** and commit to `main`/`master` anyway.

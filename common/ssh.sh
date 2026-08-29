@@ -283,16 +283,63 @@ seed_known_hosts() {
     log_warning "known_hosts was seeded from the network — verify github.com against https://docs.github.com/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints"
 }
 
-# Upload the public key to GitHub with gh, skipping if it is already there
+# Copy stdin to the clipboard when the session has one. A headless box reached
+# over SSH has none, so failing here is normal and never fatal — the caller
+# treats it as a hint, not as a step that has to succeed.
+copy_to_clipboard() {
+    if [[ -n "${WAYLAND_DISPLAY:-}" ]] && command_exists wl-copy; then
+        wl-copy >/dev/null 2>&1 && return 0
+    fi
+
+    if [[ -n "${DISPLAY:-}" ]] && command_exists xclip; then
+        xclip -selection clipboard >/dev/null 2>&1 && return 0
+    fi
+
+    if [[ -n "${DISPLAY:-}" ]] && command_exists xsel; then
+        xsel --clipboard --input >/dev/null 2>&1 && return 0
+    fi
+
+    return 1
+}
+
+# Fallback for every path where gh cannot upload the key: print the key itself,
+# not just its path. On a headless box the script output is often the only
+# window on that file, so a bare path means a second round trip.
+show_key_for_manual_upload() {
+    local PUB="$SSH_DIR/$KEY_NAME.pub"
+
+    if [[ ! -f "$PUB" ]]; then
+        log_error "Public key $PUB not found"
+        return 0
+    fi
+
+    log_info "Add it by hand at https://github.com/settings/keys (New SSH key, type: Authentication)"
+    log_info "Title: $(hostname)"
+    echo ""
+    echo "--------8<-------- $PUB --------8<--------"
+    cat "$PUB"
+    echo "--------8<------------------------------------------------"
+    echo ""
+
+    if copy_to_clipboard < "$PUB"; then
+        log_success "Public key also copied to the clipboard"
+    fi
+
+    log_info "Once it is added, verify with: ssh -T git@$HOST_ALIAS"
+}
+
+# Upload the public key to GitHub with gh, skipping if it is already there.
+# Every branch that cannot upload falls back to show_key_for_manual_upload.
 upload_key_to_github() {
     if ! command_exists gh; then
-        log_warning "gh not installed — add the key manually at https://github.com/settings/keys"
-        log_info "Public key: $SSH_DIR/$KEY_NAME.pub"
+        log_warning "gh is not installed — the key has to go to GitHub by hand"
+        show_key_for_manual_upload
         return 0
     fi
 
     if ! gh auth status >/dev/null 2>&1; then
-        log_warning "gh is not authenticated — run: gh auth login"
+        log_warning "gh is not authenticated — run 'gh auth login' and re-run, or add the key by hand"
+        show_key_for_manual_upload
         return 0
     fi
 
@@ -308,7 +355,8 @@ upload_key_to_github() {
     if gh ssh-key add "$SSH_DIR/$KEY_NAME.pub" --title "$(hostname)"; then
         log_success "Key uploaded to GitHub as '$(hostname)'"
     else
-        log_warning "gh ssh-key add failed — add it manually at https://github.com/settings/keys"
+        log_warning "gh ssh-key add failed"
+        show_key_for_manual_upload
     fi
 }
 
