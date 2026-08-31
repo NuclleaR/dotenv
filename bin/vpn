@@ -52,8 +52,11 @@ Usage:
   vpn create [name]   put this machine on your tailnet under "name"
                       (default: $(hostname -s)). Run once, on the machine
                       you want to reach — a box, a server
-  vpn up [account]    connect. With an account name, move to that tailnet
-                      first, logging in if this machine has never used it
+  vpn up [account]    connect, accepting the routes the tailnet advertises.
+                      With an account name, move to that tailnet first,
+                      logging in if this machine has never used it.
+                      Further flags go to "tailscale set", e.g.
+                      vpn up work --exit-node=
   vpn down            disconnect, leaving the daemon running
   vpn status          who is on the tailnet, and how each peer is reached
   vpn ls              the accounts this machine is logged into
@@ -92,7 +95,11 @@ main() {
 
     case "$CMD" in
         up)
-            local ACCOUNT="${1:-}"
+            local ACCOUNT=""
+            if [[ -n "${1:-}" && "${1}" != -* ]]; then
+                ACCOUNT="$1"
+                shift
+            fi
 
             if [[ -n "$ACCOUNT" ]]; then
                 # `switch` fails when this machine has never used that account,
@@ -107,12 +114,16 @@ main() {
                 fi
             fi
 
-            # Deliberately no flags. `tailscale up` with none of them brings the
-            # network online without touching settings; the moment one flag is
-            # passed, tailscale treats it as the complete set of desired
-            # settings and errors out on anything an unspecified flag would
-            # reset — including the hostname this machine registered under.
-            # Settings belong to "create", not here.
+            # Routes advertised by other nodes are off by default, and a work
+            # tailnet is largely useless without them. `set` is what applies
+            # them: unlike `up`, it changes only the settings named, so it
+            # cannot trip over the hostname this machine registered under.
+            # Anything else passed to "up" lands here too — an exit node, say.
+            $SUDO "$TS" set --accept-routes "$@"
+
+            # `up` itself stays flagless on purpose. Given even one flag it
+            # treats the flags as the complete set of desired settings and
+            # errors out on anything an unspecified one would reset.
             $SUDO "$TS" up
             ;;
         down)
