@@ -29,6 +29,7 @@ RAW_BASE="${DOTENV_RAW:-https://raw.githubusercontent.com/NuclleaR/dotenv/main}"
 # bin/ has to be added here by hand or the piped install will miss it.
 BIN_FILES=(
     vpn
+    dev
 )
 
 TARGET_DIR="${HOME}/.local/bin"
@@ -114,7 +115,7 @@ main() {
     echo ""
     check_path
     echo ""
-    log_info "Try it: vpn help"
+    log_info "Try it: vpn help, dev help"
 }
 
 if [[ -z "${BASH_SOURCE[0]:-}" || "${BASH_SOURCE[0]}" == "$0" ]]; then

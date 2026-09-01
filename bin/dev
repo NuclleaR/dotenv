@@ -1,0 +1,288 @@
+#!/usr/bin/env python3
+
+"""dev — connect to a remote box by a short name.
+
+    dev lbox
+
+reads ~/.config/.shell/dev.toml, finds the [lbox] table and execs ssh with what
+it says. The point is not to replace ~/.ssh/config — a Host entry there is still
+the right place for a port, a jump host or a keepalive. The point is the one
+line per box you actually type, plus the things ssh has no config for: which
+local ports to forward and what to run on arrival.
+
+Python rather than bash — unlike bin/vpn, which is a pure command dispatcher,
+this one has a file format in it. tomllib has been in the standard library since
+3.11, so reading the config costs nothing and is actually correct; the awk
+parser this replaced handled neither multi-line arrays nor escapes.
+
+Installed into ~/.local/bin by bin/install.sh, and it runs from there with no
+repo next to it — hence no imports from this repo.
+"""
+
+import os
+import shlex
+import sys
+
+RED = "\033[0;31m"
+GREEN = "\033[0;32m"
+YELLOW = "\033[1;33m"
+BLUE = "\033[0;34m"
+NC = "\033[0m"
+
+
+def log_info(msg):
+    print(f"{BLUE}[INFO]{NC} {msg}")
+
+
+def log_success(msg):
+    print(f"{GREEN}[SUCCESS]{NC} {msg}")
+
+
+def log_warning(msg):
+    print(f"{YELLOW}[WARNING]{NC} {msg}")
+
+
+def log_error(msg):
+    print(f"{RED}[ERROR]{NC} {msg}", file=sys.stderr)
+
+
+CONFIG = os.environ.get(
+    "DEV_CONFIG", os.path.join(os.path.expanduser("~"), ".config", ".shell", "dev.toml")
+)
+
+KNOWN_KEYS = ("ssh", "identity", "forward", "command")
+
+STARTER = """\
+# Boxes reachable with `dev <name>`.
+#
+# Required:
+#   ssh       user@address, or a Host entry from ~/.ssh/config
+# Optional:
+#   identity  path to a private key, passed as -i
+#   forward   local port forward, passed as -L; a string or an array of them
+#   command   run this on arrival instead of an interactive shell
+
+# [lbox]
+# ssh     = "serhii@lbox"
+# forward = ["3000:localhost:3000"]
+
+# [work]
+# ssh      = "serhii@10.0.0.5"
+# identity = "~/.ssh/id_ed25519_work"
+# command  = "tmux new -A -s main"
+"""
+
+USAGE = f"""\
+dev — connect to a remote box by a short name
+
+Usage:
+  dev <name> [ssh args...]  ssh to the box named <name>. Anything extra is
+                            handed to ssh as-is, e.g. dev lbox -A
+  dev ls                    list the boxes in the config (also: dev alone)
+  dev edit                  open the config in $EDITOR
+  dev init                  write a starter config; never overwrites one
+  dev help                  this help
+
+Config: {CONFIG}
+
+  [lbox]
+  ssh = "serhii@lbox"
+
+  [work]
+  ssh      = "serhii@10.0.0.5"
+  identity = "~/.ssh/id_ed25519_work"    # optional, -i
+  forward  = ["3000:localhost:3000"]     # optional, -L, string or array
+  command  = "tmux new -A -s main"       # optional, run instead of a shell
+
+Only "ssh" is required. A port, a jump host or anything else ssh knows about
+belongs in ~/.ssh/config — the value of "ssh" can be a Host entry from there
+just as well as user@address.
+"""
+
+
+def exec_or_die(program, argv):
+    """execvp, but without eating what we just printed.
+
+    exec replaces the process image, so anything still sitting in Python's
+    stdout buffer never gets written — invisible on a terminal, where the
+    buffer is line-based, and lost the moment the output goes to a pipe.
+    """
+    sys.stdout.flush()
+    sys.stderr.flush()
+    try:
+        os.execvp(program, argv)
+    except OSError as exc:
+        log_error(f"Cannot run {program}: {exc}")
+        return 1
+
+
+def load_config():
+    """The parsed config, or None with the reason already logged."""
+    try:
+        import tomllib
+    except ModuleNotFoundError:
+        log_error(f"This needs Python 3.11 or newer for tomllib; running {sys.version.split()[0]}")
+        return None
+
+    try:
+        with open(CONFIG, "rb") as handle:
+            return tomllib.load(handle)
+    except FileNotFoundError:
+        log_error(f"No config at {CONFIG}")
+        log_info("Create one with:  dev init")
+        return None
+    except tomllib.TOMLDecodeError as exc:
+        log_error(f"{CONFIG} is not valid TOML: {exc}")
+        log_info("Fix it with:  dev edit")
+        return None
+    except OSError as exc:
+        log_error(f"Cannot read {CONFIG}: {exc}")
+        return None
+
+
+def boxes(config):
+    """Only the tables are boxes; a stray top-level key is not one."""
+    return {name: body for name, body in config.items() if isinstance(body, dict)}
+
+
+def forwards_of(body):
+    """"forward" takes either one string or a list of them."""
+    value = body.get("forward")
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    return [str(item) for item in value]
+
+
+def cmd_ls(config):
+    found = boxes(config)
+    if not found:
+        log_warning(f"No boxes in {CONFIG} yet")
+        log_info("Add a table to it:  dev edit")
+        return 1
+
+    for name, body in found.items():
+        notes = []
+        if body.get("identity"):
+            notes.append("identity")
+        if body.get("command"):
+            notes.append("command")
+        count = len(forwards_of(body))
+        if count == 1:
+            notes.append("1 forward")
+        elif count > 1:
+            notes.append(f"{count} forwards")
+
+        target = body.get("ssh") or '<no "ssh" set>'
+        suffix = f"  ({', '.join(notes)})" if notes else ""
+        print(f"  {name:<14} {target}{suffix}")
+
+    return 0
+
+
+def cmd_init():
+    if os.path.exists(CONFIG):
+        log_warning(f"{CONFIG} already exists — leaving it alone")
+        log_info("Edit it with:  dev edit")
+        return 0
+
+    os.makedirs(os.path.dirname(CONFIG), exist_ok=True)
+    with open(os.open(CONFIG, os.O_CREAT | os.O_WRONLY, 0o600), "w") as handle:
+        handle.write(STARTER)
+
+    log_success(f"Wrote {CONFIG}")
+    log_info("Uncomment a table and add your own:  dev edit")
+    return 0
+
+
+def cmd_edit():
+    if not os.path.exists(CONFIG):
+        log_error(f"No config at {CONFIG}")
+        log_info("Create one with:  dev init")
+        return 1
+
+    editor = os.environ.get("EDITOR", "vi")
+    return exec_or_die(editor, [editor, CONFIG])
+
+
+def cmd_connect(config, name, extra):
+    found = boxes(config)
+    body = found.get(name)
+    if body is None:
+        log_error(f'No box named "{name}" in {CONFIG}')
+        print()
+        cmd_ls(config)
+        return 1
+
+    for key in body:
+        if key not in KNOWN_KEYS:
+            log_warning(f'{name}: unknown key "{key}" — ignored')
+
+    target = body.get("ssh")
+    if not target:
+        log_error(f'[{name}] in {CONFIG} has no "ssh" key')
+        log_info('It needs at least:  ssh = "user@address"')
+        return 1
+
+    args = []
+
+    identity = body.get("identity")
+    if identity:
+        keyfile = os.path.expanduser(identity)
+        # Not fatal: the agent may well hold the key even when the file named
+        # here is gone, and ssh says so far better than a guess here would.
+        if not os.path.isfile(keyfile):
+            log_warning(f"identity file not found: {keyfile}")
+        args += ["-i", keyfile]
+
+    for forward in forwards_of(body):
+        args += ["-L", forward]
+
+    # Extra arguments from the command line come before the target, so they can
+    # be plain ssh flags.
+    args += extra
+    args.append(str(target))
+
+    remote = body.get("command")
+    if remote:
+        args.append(str(remote))
+
+    log_info("ssh " + " ".join(shlex.quote(a) for a in args))
+    return exec_or_die("ssh", ["ssh"] + args)
+
+
+def main(argv):
+    cmd = argv[0] if argv else "ls"
+
+    if cmd in ("help", "-h", "--help"):
+        print(USAGE, end="")
+        return 0
+
+    if cmd == "init":
+        return cmd_init()
+
+    if cmd == "edit":
+        return cmd_edit()
+
+    if cmd.startswith("-"):
+        log_error(f"Unknown option: {cmd}")
+        print()
+        print(USAGE, end="")
+        return 1
+
+    config = load_config()
+    if config is None:
+        return 1
+
+    if cmd in ("ls", "list"):
+        return cmd_ls(config)
+
+    return cmd_connect(config, cmd, argv[1:])
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except KeyboardInterrupt:
+        sys.exit(130)
