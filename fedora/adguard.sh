@@ -7,8 +7,8 @@
 # real .service from /etc/containers/systemd/, so it starts at boot, restarts on
 # failure and shows up in systemctl like anything else.
 #
-#   curl -sS https://raw.githubusercontent.com/NuclleaR/dotenv/main/fedora/adguard.sh | bash -s -- -h
-#   curl -sS https://raw.githubusercontent.com/NuclleaR/dotenv/main/fedora/adguard.sh | bash -s -- -a
+#   curl -fsSL https://raw.githubusercontent.com/NuclleaR/dotenv/main/fedora/adguard.sh | bash -s -- -h
+#   curl -fsSL https://raw.githubusercontent.com/NuclleaR/dotenv/main/fedora/adguard.sh | bash -s -- -a
 #
 # That is why the log helpers are inline instead of sourced from common/: piped
 # into a shell there is no script path to resolve a sibling file from. Keep them
@@ -386,7 +386,7 @@ AdGuard Home for Fedora (rootful podman + systemd quadlet)
 
 Usage:
   ./fedora/adguard.sh [-i <name>] [-a] [-l] [-v] [-h]
-  curl -sS <raw-url>/fedora/adguard.sh | bash -s -- -a
+  curl -fsSL <raw-url>/fedora/adguard.sh | bash -s -- -a
 
   -i <name>   run one step (repeatable)
   -a          run everything, in order

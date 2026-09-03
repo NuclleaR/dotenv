@@ -5,7 +5,7 @@
 # Carves a logical volume out of the free space in the volume group, puts XFS on
 # it and mounts it at ~/projects, with the package manager stores inside it.
 #
-#   curl -sS https://raw.githubusercontent.com/NuclleaR/dotenv/main/fedora/storage.sh | bash -s -- -h
+#   curl -fsSL https://raw.githubusercontent.com/NuclleaR/dotenv/main/fedora/storage.sh | bash -s -- -h
 #
 # By default the volume is VDO backed: block level deduplication plus
 # compression. That is worth it because npm *copies* packages into every
@@ -79,7 +79,7 @@ Projects volume for Fedora
 
 Usage:
   ./fedora/storage.sh [-g VG] [-n NAME] [-s SIZE] [-V VSIZE] [-m MOUNT] [--no-vdo] [-y] [-h]
-  curl -sS <raw-url>/fedora/storage.sh | bash -s -- -s 120G
+  curl -fsSL <raw-url>/fedora/storage.sh | bash -s -- -s 120G
 
   -g VG       volume group (default: the only one present)
   -n NAME     logical volume name (default: $LV_NAME)

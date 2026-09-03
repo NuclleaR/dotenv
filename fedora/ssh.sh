@@ -9,8 +9,8 @@
 #
 # Run it straight off the internet, no clone needed:
 #
-#   curl -sS https://raw.githubusercontent.com/NuclleaR/dotenv/main/fedora/ssh.sh | bash
-#   curl -sS https://raw.githubusercontent.com/NuclleaR/dotenv/main/fedora/ssh.sh | bash -s -- -n id_ed25519_work -H github-work
+#   curl -fsSL https://raw.githubusercontent.com/NuclleaR/dotenv/main/fedora/ssh.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/NuclleaR/dotenv/main/fedora/ssh.sh | bash -s -- -n id_ed25519_work -H github-work
 #
 # Piped, it downloads common/ssh.sh and its two helpers into a temp dir and runs
 # them from there; from a clone it runs the local copy. Either way stdin is
@@ -113,7 +113,7 @@ hint_gh() {
     fi
     log_info "gh is not installed — the key will have to be added to GitHub by hand"
     log_info "To upload it automatically next time:"
-    log_info "    curl -sS $RAW_BASE/fedora/apps.sh | bash -s -- -i gh && gh auth login"
+    log_info "    curl -fsSL $RAW_BASE/fedora/apps.sh | bash -s -- -i gh && gh auth login"
 }
 
 # Temp dir holding the downloaded common/ when piped; global so the EXIT trap

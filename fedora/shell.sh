@@ -8,7 +8,7 @@
 #
 # Run it straight off the internet, no clone needed:
 #
-#   curl -sS https://raw.githubusercontent.com/NuclleaR/dotenv/main/fedora/shell.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/NuclleaR/dotenv/main/fedora/shell.sh | bash
 #
 # Piped, it downloads the files it needs into ~/.shell. Run from a clone, it
 # symlinks ~/.shell/<dir> at the repo instead, so editing a file in the repo

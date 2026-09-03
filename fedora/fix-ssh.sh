@@ -33,8 +33,8 @@
 #
 # Run it straight off the internet, no clone needed:
 #
-#   curl -sS https://raw.githubusercontent.com/NuclleaR/dotenv/main/fedora/fix-ssh.sh | bash
-#   curl -sS https://raw.githubusercontent.com/NuclleaR/dotenv/main/fedora/fix-ssh.sh | bash -s -- -r
+#   curl -fsSL https://raw.githubusercontent.com/NuclleaR/dotenv/main/fedora/fix-ssh.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/NuclleaR/dotenv/main/fedora/fix-ssh.sh | bash -s -- -r
 #
 # The log helpers are inline rather than sourced from common/ because piped into
 # a shell there is no script path to resolve a sibling file from. Keep them in
@@ -79,7 +79,7 @@ SELinux fix for SSH port forwarding on Fedora
 
 Usage:
   ./fedora/fix-ssh.sh [-r] [-s] [-h]
-  curl -sS <raw-url>/fedora/fix-ssh.sh | bash
+  curl -fsSL <raw-url>/fedora/fix-ssh.sh | bash
 
   -r   remove the $MODULE_NAME module again
   -s   show what is installed and what the audit log says, change nothing

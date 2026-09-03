@@ -65,10 +65,10 @@ fresh system run them **in this order**:
 
 ```bash
 RAW=https://raw.githubusercontent.com/NuclleaR/dotenv/main
-curl -sS $RAW/fedora/postinstall.sh | bash          # 1. harden it first
-curl -sS $RAW/fedora/storage.sh     | bash          # 2. carve the projects volume, if wanted
-curl -sS $RAW/fedora/shell.sh       | bash          # 3. zsh and its config
-curl -sS $RAW/fedora/apps.sh        | bash -s -- -a # 4. everything else
+curl -fsSL $RAW/fedora/postinstall.sh | bash          # 1. harden it first
+curl -fsSL $RAW/fedora/storage.sh     | bash          # 2. carve the projects volume, if wanted
+curl -fsSL $RAW/fedora/shell.sh       | bash          # 3. zsh and its config
+curl -fsSL $RAW/fedora/apps.sh        | bash -s -- -a # 4. everything else
 ```
 
 **`postinstall.sh` goes first, always.** The name means *after installing the

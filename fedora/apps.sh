@@ -5,9 +5,9 @@
 # Run it straight off the internet, no clone needed — it only installs software,
 # it touches nothing in this repo:
 #
-#   curl -sS https://raw.githubusercontent.com/NuclleaR/dotenv/main/fedora/apps.sh | bash -s -- -h
-#   curl -sS https://raw.githubusercontent.com/NuclleaR/dotenv/main/fedora/apps.sh | bash -s -- -a
-#   curl -sS https://raw.githubusercontent.com/NuclleaR/dotenv/main/fedora/apps.sh | bash -s -- -i rust
+#   curl -fsSL https://raw.githubusercontent.com/NuclleaR/dotenv/main/fedora/apps.sh | bash -s -- -h
+#   curl -fsSL https://raw.githubusercontent.com/NuclleaR/dotenv/main/fedora/apps.sh | bash -s -- -a
+#   curl -fsSL https://raw.githubusercontent.com/NuclleaR/dotenv/main/fedora/apps.sh | bash -s -- -i rust
 #
 # That is why the log helpers are inline instead of sourced from common/: piped
 # into a shell there is no script path to resolve a sibling file from. Keep them
@@ -88,7 +88,7 @@ App installer for Fedora
 
 Usage:
   ./fedora/apps.sh [-i <name>] [-a] [-l] [-v] [-h]
-  curl -sS <raw-url>/fedora/apps.sh | bash -s -- -a
+  curl -fsSL <raw-url>/fedora/apps.sh | bash -s -- -a
 
   -i <name>   install one thing (repeatable)
   -a          install everything, in dependency order

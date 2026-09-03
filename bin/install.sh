@@ -4,7 +4,7 @@
 #
 # Run it straight off the internet, no clone needed:
 #
-#   curl -sS https://raw.githubusercontent.com/NuclleaR/dotenv/main/bin/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/NuclleaR/dotenv/main/bin/install.sh | bash
 #
 # From a clone it copies the file sitting next to it instead of downloading.
 # The log helpers are inline for the same reason as in fedora/apps.sh: piped

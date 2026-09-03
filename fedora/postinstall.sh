@@ -21,7 +21,7 @@
 # Run it straight off the internet, no clone needed — it only touches system
 # packages and system config, nothing in this repo:
 #
-#   curl -sS https://raw.githubusercontent.com/NuclleaR/dotenv/main/fedora/postinstall.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/NuclleaR/dotenv/main/fedora/postinstall.sh | bash
 #
 # That is why the log helpers are inline instead of sourced from common/: piped
 # into a shell there is no script path to resolve a sibling file from. Keep them

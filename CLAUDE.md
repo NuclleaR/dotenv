@@ -77,7 +77,7 @@ Everything optional in `shared/` is guarded (`command -v <tool> >/dev/null`, `[[
 clone:
 
 ```bash
-curl -sS https://raw.githubusercontent.com/NuclleaR/dotenv/main/fedora/apps.sh | bash -s -- -a
+curl -fsSL https://raw.githubusercontent.com/NuclleaR/dotenv/main/fedora/apps.sh | bash -s -- -a
 ```
 
 Two consequences that look like bugs but are deliberate:
