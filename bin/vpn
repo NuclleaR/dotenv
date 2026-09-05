@@ -114,17 +114,10 @@ main() {
                 fi
             fi
 
-            # Routes advertised by other nodes are off by default, and a work
-            # tailnet is largely useless without them. `set` is what applies
-            # them: unlike `up`, it changes only the settings named, so it
-            # cannot trip over the hostname this machine registered under.
-            # Anything else passed to "up" lands here too — an exit node, say.
-            $SUDO "$TS" set --accept-routes "$@"
-
             # `up` itself stays flagless on purpose. Given even one flag it
             # treats the flags as the complete set of desired settings and
             # errors out on anything an unspecified one would reset.
-            $SUDO "$TS" up
+            $SUDO "$TS" up --accept-routes "$@"
             ;;
         down)
             $SUDO "$TS" down "$@"
