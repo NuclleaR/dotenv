@@ -34,6 +34,23 @@ gco() {
   [ -n "$branch" ] && git switch "$branch"
 }
 
+# cd into a worktree: by branch name, or picked with skim when no argument is given
+# Usage: wtcd [branch]
+wtcd() {
+  local dir
+  if [ -n "$1" ]; then
+    dir=$(git worktree list --porcelain | awk -v b="refs/heads/$1" '/^worktree /{w=$2} /^branch /&&$2==b{print w}')
+    [ -n "$dir" ] || { echo "wtcd: no worktree for branch $1" >&2; return 1; }
+  else
+    dir=$(
+      git worktree list | sk \
+        --preview 'git -C {1} log --oneline --color=always -10' \
+        --preview-window=right:60% | awk '{print $1}'
+    )
+  fi
+  [ -n "$dir" ] && cd "$dir"
+}
+
 # Interactive ripgrep search with file preview
 # Usage: skrg [rg options] [path]
 # Examples:

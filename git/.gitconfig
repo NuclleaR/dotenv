@@ -21,6 +21,17 @@
 	sync = "!f() { echo \"Fetching latest changes...\" && git fetch --all && echo \"Attempting to merge with main/master...\" && (git merge --no-ff origin/main || git merge --no-ff origin/master || echo \"Merge conflicts detected. Please resolve manually\"); }; f"
 	rm = "!f() { git fetch --all && (git reset --hard origin/main || git reset --hard origin/master); }; f"
 	lg = log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit
+	# worktrees
+	wt = worktree
+	wtl = worktree list
+	wtp = worktree prune
+	wtr = worktree remove
+	wtrf = worktree remove --force
+	# git wta <branch> [path] — worktree for <branch> next to the main repo (../<repo>-<branch>);
+	# reuses a local branch, tracks origin/<branch> if only remote, otherwise creates it from HEAD
+	wta = "!f() { b=\"$1\"; [ -n \"$b\" ] || { echo \"usage: git wta <branch> [path]\" >&2; return 1; }; root=$(cd \"$(git rev-parse --git-common-dir)/..\" && pwd); p=\"${2:-$(dirname \"$root\")/$(basename \"$root\")-$(printf '%s' \"$b\" | tr / -)}\"; if git show-ref --verify -q \"refs/heads/$b\"; then git worktree add \"$p\" \"$b\"; elif git show-ref --verify -q \"refs/remotes/origin/$b\"; then git worktree add --track -b \"$b\" \"$p\" \"origin/$b\"; else git worktree add -b \"$b\" \"$p\"; fi; }; f"
+	# git wtd <branch> — remove the worktree of <branch> and delete the branch
+	wtd = "!f() { b=\"$1\"; [ -n \"$b\" ] || { echo \"usage: git wtd <branch>\" >&2; return 1; }; p=$(git worktree list --porcelain | awk -v b=\"refs/heads/$b\" '/^worktree /{w=$2} /^branch /&&$2==b{print w}'); [ -n \"$p\" ] || { echo \"no worktree for branch $b\" >&2; return 1; }; git worktree remove \"$p\" && git branch -d \"$b\"; }; f"
 [credential "https://github.com"]
 	helper =
 	helper = !/usr/bin/gh auth git-credential

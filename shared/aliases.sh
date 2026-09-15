@@ -81,6 +81,14 @@ alias gclean='git clean -fd'
 alias gtag='git tag'
 alias gshow='git show'
 
+# Worktrees — wta/wtd are git aliases from git/.gitconfig; gwtcd (skim.sh) does the cd git can't
+alias gwt='git worktree'
+alias gwtl='git worktree list'
+alias gwta='git wta'
+alias gwtd='git wtd'
+alias gwtr='git worktree remove'
+alias gwtp='git worktree prune'
+
 # zoxide (better cd) — z jumps by frequency, zi is the interactive picker
 if command -v zoxide >/dev/null; then
     alias cd='z'
