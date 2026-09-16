@@ -30,7 +30,7 @@ RAW_BASE="${DOTENV_RAW:-https://raw.githubusercontent.com/NuclleaR/dotenv/main}"
 BIN_FILES=(
     vpn
     dev
-    claude-install
+    deb2app
 )
 
 TARGET_DIR="${HOME}/.local/bin"
@@ -116,7 +116,7 @@ main() {
     echo ""
     check_path
     echo ""
-    log_info "Try it: vpn help, dev help, claude-install help"
+    log_info "Try it: vpn help, dev help, deb2app help"
 }
 
 if [[ -z "${BASH_SOURCE[0]:-}" || "${BASH_SOURCE[0]}" == "$0" ]]; then
