@@ -8,7 +8,7 @@ Covered: openSUSE, Arch, Ubuntu/Pop!\_OS, Fedora, macOS.
 
 | Path | What it is |
 | --- | --- |
-| `common/` | Distribution-independent **setup** functions: `logger.sh`, `utils.sh` (`command_exists`, `setup_zshrc`, `install_cargo_app`), `git_conf.sh`, `rust.sh`, `ssh.sh`, `gpg.sh`, plus the `backup-ssh.sh` / `restore-ssh.sh` helpers |
+| `common/` | Distribution-independent **setup** functions: `logger.sh`, `utils.sh` (`command_exists`, `setup_zshrc`, `install_cargo_app`), `git_conf.sh`, `rust.sh`, `ssh.sh`, `gpg.sh`, `herdr.sh`, plus the `backup-ssh.sh` / `restore-ssh.sh` helpers |
 | `shared/` | The **runtime** zsh config, sourced from `~/.zshrc`: `zsh.sh` (entry point), `aliases.sh`, `skim.sh`, `starship.toml` |
 | `openSUSE/` | zypper installs and zypper aliases |
 | `arch/`, `arch.sh` | Arch bootstrap with per-topic modules (drivers, zram, packages, cli tools) |
@@ -16,6 +16,7 @@ Covered: openSUSE, Arch, Ubuntu/Pop!\_OS, Fedora, macOS.
 | `fedora/` | `shell.sh` and `postinstall.sh` follow the current pattern; `bootstrap.sh` is an older self-contained script |
 | `macos/` | Older self-contained bootstrap script |
 | `git/` | Global gitignore, symlinked by `common/git_conf.sh` |
+| `herdr/` | Herdr app mods and patches. `common/herdr.sh` symlinks the mods into `~/.config/herdr-app/mods` and rebuilds the `my-tabs` / `my-layout` clones; run it after every Herdr update |
 | `kde/`, `kde_shell.sh` | KDE keyboard remapping and config backup |
 | `keyd/` | keyd keymap (`default.conf`) |
 | `vscode/` | Recommended extensions and settings |

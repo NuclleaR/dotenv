@@ -1,0 +1,5 @@
+      .child(h_flex().id("open-in-vscode").h(26).px(8).gap(5).flex_none().items_center().rounded(6)
+        .text_size(12).bg(t.chrome).text_color(t.muted)
+        .hover(s => s.bg(t.hover)).on_mouse_down("left", stop)
+        .on_click(() => run("mod.open", { name: "open-in-vscode" }))
+        .child(svg("mods/my-tabs/code.svg").size(14)).child("VS Code"))
