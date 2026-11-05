@@ -77,8 +77,9 @@ assemble_my_tabs() {
     # Without it in `enabled`, switching spaces would not restore the panel.
     # `r` must stay its own -e: BSD sed reads the file name up to the newline
     { printf 'import { repoSpace } from "./repo-space.js";\n'
+      printf 'import { checkClones } from "./clone-check.js";\n'
       sed -e "/$anchor/r $patch_dir/button.js" \
-          -e "/$sync/r $patch_dir/close-panel.js" \
+          -e "/$sync/r $patch_dir/render-start.js" \
           -e 's|render() {|render(cx) {|' \
           -e 's|shared("workspace.panels") ?? \["files", "changes"\]|[...(&), "merge-requests"]|' \
           "$out/main.js"
@@ -94,7 +95,14 @@ assemble_my_tabs() {
         "$out/mod.json" > "$out/mod.json.new" || return 1
     mv "$out/mod.json.new" "$out/mod.json"
 
-    cp "$patch_dir/code.svg" "$patch_dir/merge-request.svg" "$patch_dir/repo-space.js" "$out/"
+    # After the path rewrite above: clone-check.js has to keep naming the shipped mod
+    cp "$patch_dir/code.svg" "$patch_dir/merge-request.svg" "$patch_dir/repo-space.js" \
+        "$patch_dir/clone-check.js" "$out/"
+
+    # What this build came from, for clone-check.js. Not .js: Herdr must not load them
+    mkdir -p "$out/shipped"
+    cp "$HERDR_HOME/mods/tabs/main.js" "$out/shipped/tabs-main.txt"
+    cp "$HERDR_HOME/layouts/main.json" "$out/shipped/main-layout.txt"
 }
 
 # Shipped main layout, pointed at my-tabs, with my-prs as one more side panel
@@ -150,6 +158,30 @@ install_my_layout() {
     log_success "Herdr layout my-layout rebuilt"
 }
 
+# `herdr-app check` only covers a mod: a layout is judged by the running window,
+# which keeps the last good one and reports why. Without a window nothing can be asked.
+verify_herdr_applied() {
+    local report errors line
+
+    sleep 2
+    if ! report="$(herdr-app status 2>/dev/null)"; then
+        log_info "Herdr is not running, so the rebuilt layout was not verified"
+        return 0
+    fi
+
+    errors="$(jq -r '.errors[]' <<< "$report")"
+    if [[ -z "$errors" ]]; then
+        log_success "Herdr reports no errors"
+        return 0
+    fi
+
+    log_error "Herdr reports errors, it may still show the previous version:"
+    while IFS= read -r line; do
+        [[ -n "$line" ]] && log_error "  $line"
+    done <<< "$errors"
+    return 1
+}
+
 # Rebuild my-tabs and my-layout from what the installed Herdr ships. Nothing is
 # replaced unless the whole build passes, so a breaking update keeps the old pair.
 # Hand edits to the two clones do not survive: they belong in herdr/patches.
@@ -174,6 +206,7 @@ build_herdr_layout() {
         install_my_tabs "$build/my-tabs"
         install_my_layout "$build/my-layout.json"
         log_info "Herdr $version, to show the layout: herdr-app do layout.switch --name my-layout"
+        verify_herdr_applied || status=1
     else
         log_error "Herdr $version: rebuild failed, my-tabs and my-layout were left as they were"
         status=1
