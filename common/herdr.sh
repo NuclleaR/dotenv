@@ -17,8 +17,9 @@ HERDR_GENERATED=(gpui-kit.d.ts herdr.d.ts jsconfig.json)
 
 # Symlink every mod in herdr/mods into the Herdr home. Herdr does not watch through
 # these links: a repo edit reaches new copies of a mod, and one already on screen
-# only after a layout switch and back. It does not draw SVGs through them either,
-# so a mod's icons belong in a patch.
+# only after a layout switch and back. A change to a module main.js imports seems
+# to need a Herdr restart. It does not draw SVGs through these links either, so a
+# mod's icons belong in a patch.
 setup_herdr_mods() {
     local source_dir target_dir mod_dir name target
     source_dir="$(cd "$COMMON_DIR/../herdr/mods" && pwd)" || return 1
@@ -97,7 +98,7 @@ assemble_my_tabs() {
     mv "$out/mod.json.new" "$out/mod.json"
 
     # After the path rewrite above: clone-check.js has to keep naming the shipped mod
-    cp "$patch_dir/code.svg" "$patch_dir/merge-request.svg" "$patch_dir/just.svg" \
+    cp "$patch_dir/code.svg" "$patch_dir/merge-request.svg" "$patch_dir/just.svg" "$patch_dir/copy.svg" \
         "$patch_dir/repo-space.js" "$patch_dir/just-space.js" "$patch_dir/clone-check.js" "$out/"
 
     # What this build came from, for clone-check.js. Not .js: Herdr must not load them

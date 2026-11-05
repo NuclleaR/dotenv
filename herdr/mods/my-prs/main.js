@@ -3,9 +3,19 @@
 // Hosts and logins come from glab's and gh's own config, never from this repo.
 import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { exec, notify, shared, theme, window } from "herdr";
+import { exec, focused, notify, panes, shared, spaces, theme, window } from "herdr";
+import { openBranch } from "./worktree.js";
 
 const REFRESH_MS = 120000;
+
+// The focused terminal's folder and machine: the repo this list belongs to, since
+// a click on the panel leaves the terminal focused.
+function focusedPlace() {
+  const space = spaces().find((s) => s.active), f = focused();
+  const pane = f?.pane ? panes().find((p) => p.pane === f.pane) : null;
+  const on = f?.pane === null ? (f.terminal?.includes("/") ? f.terminal.split("/")[0] : null) : space?.machine ?? null;
+  return { cwd: pane?.cwd || f?.cwd || space?.folder, on };
+}
 
 function openInBrowser(url) {
   const opener = window()?.platform === "macos" ? "open" : "xdg-open";
@@ -68,10 +78,11 @@ const FORGES = {
     args: ({ host, path }) => [
       "api",
       ...(host ? ["--hostname", host] : []),
-      `projects/${encodeURIComponent(path)}/merge_requests?scope=created_by_me&state=opened&per_page=50&with_labels_details=true&with_merge_status_recheck=true`,
+      `projects/${encodeURIComponent(path)}/merge_requests?scope=created_by_me&state=opened&order_by=updated_at&sort=desc&per_page=50&with_labels_details=true&with_merge_status_recheck=true`,
     ],
     item: (mr) => ({
       id: mr.id, title: mr.title, url: mr.web_url, draft: mr.draft, ref: mr.references.full, labels: mr.labels,
+      branch: mr.source_branch, updated: mr.updated_at,
       // A draft or an unresolved thread hides a conflict from detailed_merge_status.
       status: mr.has_conflicts ? GITLAB_STATUS.conflict : gitlabStatus(mr.detailed_merge_status),
       comments: mr.user_notes_count,
@@ -82,10 +93,11 @@ const FORGES = {
     title: "Pull requests",
     args: ({ host, path }) => [
       "pr", "list", "--repo", host ? `${host}/${path}` : path, "--author", "@me", "--state", "open",
-      "--limit", "50", "--json", "number,title,url,isDraft,labels,mergeable,mergeStateStatus,reviewDecision,comments",
+      "--limit", "50", "--json", "number,title,url,isDraft,headRefName,updatedAt,labels,mergeable,mergeStateStatus,reviewDecision,comments",
     ],
     item: (pr, { path }) => ({
       id: pr.number, title: pr.title, url: pr.url, draft: pr.isDraft, ref: `${path}#${pr.number}`,
+      branch: pr.headRefName, updated: pr.updatedAt,
       labels: pr.labels.map((l) => ({ name: l.name, color: `#${l.color}`, text_color: textOn(l.color) })),
       status: githubStatus(pr), comments: pr.comments.length,
     }),
@@ -106,7 +118,10 @@ async function fetchItems(repo) {
     return { error: stderr || `${forge.tool} exited with ${result.code}` };
   }
   try {
-    return { items: JSON.parse(result.stdout).map((item) => forge.item(item, repo)), error: null };
+    const items = JSON.parse(result.stdout).map((item) => forge.item(item, repo));
+    // Most recently updated first. gh has no reliable order of its own for this.
+    items.sort((a, b) => Date.parse(b.updated) - Date.parse(a.updated));
+    return { items, error: null };
   } catch (error) {
     return { error: `Unexpected ${forge.tool} output: ${error}` };
   }
@@ -137,20 +152,65 @@ export default class MyPrs extends View {
     });
   }
 
+  openWorktree(mr, cx) {
+    if (this.opening) return;
+    this.opening = mr.id;
+    cx.notify();
+    cx.spawn(async (cx) => {
+      try {
+        await openBranch(mr.branch, focusedPlace());
+      } catch (error) {
+        notify({ title: `Could not open ${mr.branch}`, body: error.message ?? `${error}`, level: "error" });
+      }
+      this.opening = null;
+      cx.notify();
+    });
+  }
+
+  // For a browser that isn't the system's default, where `open` would land.
+  copyLink(mr, cx) {
+    cx.write_to_clipboard(mr.url);
+    this.copied = mr.id;
+    cx.notify();
+    cx.timer.after(1500, (cx) => {
+      if (this.copied !== mr.id) return;
+      this.copied = null;
+      cx.notify();
+    });
+  }
+
   row(mr, t) {
     const statusColor = { bad: t.ansi1, warn: t.blocked, ok: t.ansi2, muted: t.dim };
-    return v_flex().id(`mr-${mr.id}`).flex_none().px(8).py(6).gap(2).rounded(7).cursor_pointer()
+    const action = (id) => div().id(`${id}-${mr.id}`).flex_none().size(26).flex().items_center().justify_center().rounded(5).cursor_pointer()
+      .text_size(15).text_color(t.muted)
+      .hover((s) => s.bg(t.raised).text_color(t.foreground));
+    // Side by side, not nested: a click on these must never reach the worktree.
+    return v_flex().id(`mr-row-${mr.id}`).flex_none().rounded(7)
       .hover((s) => s.bg(t.hover))
-      .on_click(() => openInBrowser(mr.url))
-      .child(h_flex().gap(6).items_center().min_w(0)
+      .child(h_flex().id(`mr-title-${mr.id}`).px(8).pt(6).gap(6).items_center().min_w(0).cursor_pointer()
+        .on_click((_e, cx) => this.openWorktree(mr, cx))
         .when(mr.draft, (e) => e.child(div().flex_none().px(4).rounded(4).border_1().border_color(t.border).text_size(10).text_color(t.muted).child("Draft")))
         .child(div().flex_1().min_w(0).truncate().child(mr.title)))
-      .child(h_flex().gap(8).items_center().min_w(0).text_size(11)
-        .child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(mr.ref))
-        .when(mr.comments > 0, (e) => e.child(div().flex_none().text_color(t.dim).child(`${mr.comments} ${mr.comments === 1 ? "comment" : "comments"}`)))
-        .when(Boolean(mr.status), (e) => e.child(div().flex_none().text_color(statusColor[mr.status.kind]).child(mr.status.text))))
-      .when(mr.labels.length > 0, (e) => e.child(h_flex().flex_wrap().gap(4).pt(2).children(mr.labels.map((label) =>
-        div().px(5).py(1).rounded(4).bg(label.color).text_size(10).text_color(label.text_color).child(label.name)))));
+      .child(h_flex().items_end().min_w(0).pr(3).pb(3)
+        .child(v_flex().id(`mr-${mr.id}`).flex_1().min_w(0).pl(8).pb(3).gap(4).cursor_pointer()
+          .on_click((_e, cx) => this.openWorktree(mr, cx))
+          .child(div().truncate().text_size(11).text_color(t.dim).child(mr.ref))
+          .when(mr.labels.length > 0, (e) => e.child(h_flex().flex_wrap().gap(4).children(mr.labels.map((label) =>
+            div().px(5).py(1).rounded(4).bg(label.color).text_size(10).text_color(label.text_color).child(label.name))))))
+        .child(h_flex().flex_none().items_center().gap(8).pl(8).text_size(11)
+        .when(mr.comments > 0, (e) => e.child(div().text_color(t.dim).child(`${mr.comments} ${mr.comments === 1 ? "comment" : "comments"}`)))
+        .when(Boolean(mr.status), (e) => e.child(div().text_color(statusColor[mr.status.kind]).child(mr.status.text)))
+        .child(h_flex()
+        .child(action("mr-copy")
+          .on_click((_e, cx) => this.copyLink(mr, cx))
+          .child(this.copied === mr.id
+            ? svg("mods/workspace-chrome/check.svg").size(14).text_color(t.ansi2)
+            : svg("mods/my-tabs/copy.svg").size(13)))
+        .child(action("mr-browser")
+          .on_click(() => openInBrowser(mr.url))
+          .child(this.opening === mr.id
+            ? svg("mods/workspace-chrome/spinner.svg").size(14).text_color(t.accent).spin(900)
+            : "↗")))));
   }
 
   render(cx) {
