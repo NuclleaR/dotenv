@@ -97,7 +97,7 @@ assemble_my_tabs() {
     cp "$patch_dir/code.svg" "$patch_dir/merge-request.svg" "$patch_dir/repo-space.js" "$out/"
 }
 
-# Shipped main layout, pointed at my-tabs, with my-mrs as one more side panel
+# Shipped main layout, pointed at my-tabs, with my-prs as one more side panel
 assemble_my_layout() {
     local out="$1" version="$2" shipped="$HERDR_HOME/layouts/main.json"
 
@@ -114,7 +114,7 @@ assemble_my_layout() {
     jq --arg version "$version" '
         (.. | objects | select(.mod? == "tabs") | .mod) |= "my-tabs"
         | (.. | objects | select(.id? == "panel-body") | .children) += [
-            {id: "merge-requests", type: "block", content: {mod: "my-mrs"}}
+            {id: "merge-requests", type: "block", content: {mod: "my-prs"}}
           ]
         | .cloned_from = {name: "main", version: $version}
     ' "$shipped" > "$out"

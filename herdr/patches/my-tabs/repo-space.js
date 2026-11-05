@@ -1,5 +1,5 @@
 // Which GitLab or GitHub repo the focused terminal's folder belongs to. The tabs
-// mod asks on every render and hands the answer to my-mrs as shared "my.repo".
+// mod asks on every render and hands the answer to my-prs as shared "my.repo".
 import { exec, focused, panes, setShared, spaces } from "herdr";
 
 const answers = new Map();
