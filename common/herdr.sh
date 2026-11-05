@@ -77,11 +77,12 @@ assemble_my_tabs() {
     # Without it in `enabled`, switching spaces would not restore the panel.
     # `r` must stay its own -e: BSD sed reads the file name up to the newline
     { printf 'import { repoSpace } from "./repo-space.js";\n'
+      printf 'import { justSpace } from "./just-space.js";\n'
       printf 'import { checkClones } from "./clone-check.js";\n'
       sed -e "/$anchor/r $patch_dir/button.js" \
           -e "/$sync/r $patch_dir/render-start.js" \
           -e 's|render() {|render(cx) {|' \
-          -e 's|shared("workspace.panels") ?? \["files", "changes"\]|[...(&), "merge-requests"]|' \
+          -e 's|shared("workspace.panels") ?? \["files", "changes"\]|[...(&), "merge-requests", "just"]|' \
           "$out/main.js"
     } > "$out/main.js.new"
     mv "$out/main.js.new" "$out/main.js"
@@ -96,8 +97,8 @@ assemble_my_tabs() {
     mv "$out/mod.json.new" "$out/mod.json"
 
     # After the path rewrite above: clone-check.js has to keep naming the shipped mod
-    cp "$patch_dir/code.svg" "$patch_dir/merge-request.svg" "$patch_dir/repo-space.js" \
-        "$patch_dir/clone-check.js" "$out/"
+    cp "$patch_dir/code.svg" "$patch_dir/merge-request.svg" "$patch_dir/just.svg" \
+        "$patch_dir/repo-space.js" "$patch_dir/just-space.js" "$patch_dir/clone-check.js" "$out/"
 
     # What this build came from, for clone-check.js. Not .js: Herdr must not load them
     mkdir -p "$out/shipped"
@@ -105,7 +106,7 @@ assemble_my_tabs() {
     cp "$HERDR_HOME/layouts/main.json" "$out/shipped/main-layout.txt"
 }
 
-# Shipped main layout, pointed at my-tabs, with my-prs as one more side panel
+# Shipped main layout, pointed at my-tabs, with my-prs and my-just as more side panels
 assemble_my_layout() {
     local out="$1" version="$2" shipped="$HERDR_HOME/layouts/main.json"
 
@@ -122,7 +123,8 @@ assemble_my_layout() {
     jq --arg version "$version" '
         (.. | objects | select(.mod? == "tabs") | .mod) |= "my-tabs"
         | (.. | objects | select(.id? == "panel-body") | .children) += [
-            {id: "merge-requests", type: "block", content: {mod: "my-prs"}}
+            {id: "merge-requests", type: "block", content: {mod: "my-prs"}},
+            {id: "just", type: "block", content: {mod: "my-just"}}
           ]
         | .cloned_from = {name: "main", version: $version}
     ' "$shipped" > "$out"

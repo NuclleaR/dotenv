@@ -1,4 +1,5 @@
       .when(Boolean(repo), el => el.child(panelButton("merge-requests", repo.forge === "github" ? "PRs" : "MRs", "mods/my-tabs/merge-request.svg")))
+      .when(Boolean(justfile), el => el.child(panelButton("just", "Just", "mods/my-tabs/just.svg")))
       .child(h_flex().id("open-in-vscode").h(26).px(8).gap(5).flex_none().items_center().rounded(6)
         .text_size(12).bg(t.chrome).text_color(t.muted)
         .hover(s => s.bg(t.hover)).on_mouse_down("left", stop)

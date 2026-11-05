@@ -5,7 +5,7 @@ import { exec, focused, panes, setShared, spaces } from "herdr";
 const answers = new Map();
 let published;
 
-function location() {
+export function location() {
   const space = spaces().find((s) => s.active), f = focused();
   const pane = f?.pane ? panes().find((p) => p.pane === f.pane) : null;
   const on = f?.pane === null ? (f.terminal?.includes("/") ? f.terminal.split("/")[0] : null) : space?.machine ?? null;
