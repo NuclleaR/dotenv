@@ -15,8 +15,10 @@ HERDR_BACKUPS="$HERDR_HOME/backups"
 # What Herdr writes into a mod folder by itself
 HERDR_GENERATED=(gpui-kit.d.ts herdr.d.ts jsconfig.json)
 
-# Symlink every mod in herdr/mods into the Herdr home, so repo edits apply live.
-# Herdr does not draw SVGs through these links: a mod's icons belong in a patch.
+# Symlink every mod in herdr/mods into the Herdr home. Herdr does not watch through
+# these links: a repo edit reaches new copies of a mod, and one already on screen
+# only after a layout switch and back. It does not draw SVGs through them either,
+# so a mod's icons belong in a patch.
 setup_herdr_mods() {
     local source_dir target_dir mod_dir name target
     source_dir="$(cd "$COMMON_DIR/../herdr/mods" && pwd)" || return 1
@@ -57,6 +59,7 @@ herdr_backup() {
 assemble_my_tabs() {
     local out="$1" version="$2" patch_dir="$COMMON_DIR/../herdr/patches/my-tabs"
     local anchor='enabled.includes("changes")' file generated
+    local panels='shared("workspace.panels") ?? ["files", "changes"]'
 
     cp -R "$HERDR_HOME/mods/tabs" "$out"
     for generated in "${HERDR_GENERATED[@]}"; do
@@ -68,8 +71,16 @@ assemble_my_tabs() {
         return 1
     fi
 
+    if [[ "$(grep -cF "$panels" "$out/main.js" || true)" != 1 ]]; then
+        log_error "The shipped tabs mod no longer has one '$panels' line to add the panel to"
+        return 1
+    fi
+
+    # Without it in `enabled`, switching spaces would not restore the panel.
     # `r` must stay its own -e: BSD sed reads the file name up to the newline
-    sed -e "/$anchor/r $patch_dir/button.js" "$out/main.js" > "$out/main.js.new"
+    sed -e "/$anchor/r $patch_dir/button.js" \
+        -e 's|shared("workspace.panels") ?? \["files", "changes"\]|[...(&), "merge-requests"]|' \
+        "$out/main.js" > "$out/main.js.new"
     mv "$out/main.js.new" "$out/main.js"
 
     while IFS= read -r file; do
@@ -81,10 +92,10 @@ assemble_my_tabs() {
         "$out/mod.json" > "$out/mod.json.new" || return 1
     mv "$out/mod.json.new" "$out/mod.json"
 
-    cp "$patch_dir/code.svg" "$out/code.svg"
+    cp "$patch_dir/code.svg" "$patch_dir/merge-request.svg" "$out/"
 }
 
-# Shipped main layout, pointed at my-tabs
+# Shipped main layout, pointed at my-tabs, with my-mrs as one more side panel
 assemble_my_layout() {
     local out="$1" version="$2" shipped="$HERDR_HOME/layouts/main.json"
 
@@ -93,8 +104,16 @@ assemble_my_layout() {
         return 1
     fi
 
+    if [[ "$(jq '[.. | objects | select(.id? == "panel-body")] | length' "$shipped")" != 1 ]]; then
+        log_error "The shipped main layout no longer has exactly one panel-body stack"
+        return 1
+    fi
+
     jq --arg version "$version" '
         (.. | objects | select(.mod? == "tabs") | .mod) |= "my-tabs"
+        | (.. | objects | select(.id? == "panel-body") | .children) += [
+            {id: "merge-requests", type: "block", content: {mod: "my-mrs"}}
+          ]
         | .cloned_from = {name: "main", version: $version}
     ' "$shipped" > "$out"
 }
