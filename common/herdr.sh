@@ -60,27 +60,29 @@ assemble_my_tabs() {
     local out="$1" version="$2" patch_dir="$COMMON_DIR/../herdr/patches/my-tabs"
     local anchor='enabled.includes("changes")' file generated
     local panels='shared("workspace.panels") ?? ["files", "changes"]'
+    local sync='this.syncPanel(space, panel, body, enabled);' line
 
     cp -R "$HERDR_HOME/mods/tabs" "$out"
     for generated in "${HERDR_GENERATED[@]}"; do
         rm -f "$out/$generated"
     done
 
-    if [[ "$(grep -cF "$anchor" "$out/main.js" || true)" != 1 ]]; then
-        log_error "The shipped tabs mod no longer has one '$anchor' line to put the button after"
-        return 1
-    fi
-
-    if [[ "$(grep -cF "$panels" "$out/main.js" || true)" != 1 ]]; then
-        log_error "The shipped tabs mod no longer has one '$panels' line to add the panel to"
-        return 1
-    fi
+    for line in "$anchor" "$panels" "$sync" 'render() {'; do
+        if [[ "$(grep -cF "$line" "$out/main.js" || true)" != 1 ]]; then
+            log_error "The shipped tabs mod no longer has exactly one '$line' line to patch"
+            return 1
+        fi
+    done
 
     # Without it in `enabled`, switching spaces would not restore the panel.
     # `r` must stay its own -e: BSD sed reads the file name up to the newline
-    sed -e "/$anchor/r $patch_dir/button.js" \
-        -e 's|shared("workspace.panels") ?? \["files", "changes"\]|[...(&), "merge-requests"]|' \
-        "$out/main.js" > "$out/main.js.new"
+    { printf 'import { repoSpace } from "./repo-space.js";\n'
+      sed -e "/$anchor/r $patch_dir/button.js" \
+          -e "/$sync/r $patch_dir/close-panel.js" \
+          -e 's|render() {|render(cx) {|' \
+          -e 's|shared("workspace.panels") ?? \["files", "changes"\]|[...(&), "merge-requests"]|' \
+          "$out/main.js"
+    } > "$out/main.js.new"
     mv "$out/main.js.new" "$out/main.js"
 
     while IFS= read -r file; do
@@ -92,7 +94,7 @@ assemble_my_tabs() {
         "$out/mod.json" > "$out/mod.json.new" || return 1
     mv "$out/mod.json.new" "$out/mod.json"
 
-    cp "$patch_dir/code.svg" "$patch_dir/merge-request.svg" "$out/"
+    cp "$patch_dir/code.svg" "$patch_dir/merge-request.svg" "$patch_dir/repo-space.js" "$out/"
 }
 
 # Shipped main layout, pointed at my-tabs, with my-mrs as one more side panel
