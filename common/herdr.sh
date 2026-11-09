@@ -83,7 +83,7 @@ assemble_my_tabs() {
       sed -e "/$anchor/r $patch_dir/button.js" \
           -e "/$sync/r $patch_dir/render-start.js" \
           -e 's|render() {|render(cx) {|' \
-          -e 's|shared("workspace.panels") ?? \["files", "changes"\]|[...(&), "merge-requests", "just"]|' \
+          -e 's|shared("workspace.panels") ?? \["files", "changes"\]|[...(&), "merge-requests", "just", "docker"]|' \
           "$out/main.js"
     } > "$out/main.js.new"
     mv "$out/main.js.new" "$out/main.js"
@@ -98,7 +98,7 @@ assemble_my_tabs() {
     mv "$out/mod.json.new" "$out/mod.json"
 
     # After the path rewrite above: clone-check.js has to keep naming the shipped mod
-    cp "$patch_dir/code.svg" "$patch_dir/merge-request.svg" "$patch_dir/just.svg" "$patch_dir/copy.svg" \
+    cp "$patch_dir/code.svg" "$patch_dir/merge-request.svg" "$patch_dir/just.svg" "$patch_dir/copy.svg" "$patch_dir/docker.svg" \
         "$patch_dir/repo-space.js" "$patch_dir/just-space.js" "$patch_dir/clone-check.js" "$out/"
 
     # What this build came from, for clone-check.js. Not .js: Herdr must not load them
@@ -107,7 +107,7 @@ assemble_my_tabs() {
     cp "$HERDR_HOME/layouts/main.json" "$out/shipped/main-layout.txt"
 }
 
-# Shipped main layout, pointed at my-tabs, with my-prs and my-just as more side panels
+# Shipped main layout, pointed at my-tabs, with my-prs, my-just and my-docker as more side panels
 assemble_my_layout() {
     local out="$1" version="$2" shipped="$HERDR_HOME/layouts/main.json"
 
@@ -125,7 +125,8 @@ assemble_my_layout() {
         (.. | objects | select(.mod? == "tabs") | .mod) |= "my-tabs"
         | (.. | objects | select(.id? == "panel-body") | .children) += [
             {id: "merge-requests", type: "block", content: {mod: "my-prs"}},
-            {id: "just", type: "block", content: {mod: "my-just"}}
+            {id: "just", type: "block", content: {mod: "my-just"}},
+            {id: "docker", type: "block", content: {mod: "my-docker"}}
           ]
         | .cloned_from = {name: "main", version: $version}
     ' "$shipped" > "$out"
