@@ -31,6 +31,7 @@ BIN_FILES=(
     vpn
     dev
     deb2app
+    signing-secrets
 )
 
 TARGET_DIR="${HOME}/.local/bin"
