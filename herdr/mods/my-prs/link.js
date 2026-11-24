@@ -1,7 +1,8 @@
 // Ctrl+click on a link in a terminal: a host listed in my-links.json opens in the
 // browser its rule names; everything else is passed on to Herdr, which opens it in
-// the system's default browser. The layout turns this on with
-// "link_handlers": ["my-prs"].
+// the system's default browser. Herdr offers a click only when it matches a rule in
+// this mod's mod.json "link_handlers" (every http(s) URL: the hosts are per machine,
+// in my-links.json); the layout's "link_handlers": ["my-prs"] sets the order.
 import { notify } from "herdr";
 import { browserCommand, launch } from "./open-link.js";
 

@@ -1,1 +1,5 @@
-{ "place": "none", "title": "Merge requests" }
+{
+  "place": "none",
+  "title": "Merge requests",
+  "link_handlers": [{ "kind": "url", "pattern": "^https?://" }]
+}
