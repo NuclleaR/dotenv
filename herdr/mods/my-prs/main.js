@@ -3,8 +3,10 @@
 // Hosts and logins come from glab's and gh's own config, never from this repo.
 import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { exec, focused, notify, panes, shared, spaces, theme, window } from "herdr";
+import { exec, focused, notify, panes, shared, spaces, theme } from "herdr";
 import { openBranch } from "./worktree.js";
+// The same host rules as Ctrl+click in a terminal (my-links.json).
+import { openUrl } from "./open-link.js";
 
 const REFRESH_MS = 120000;
 
@@ -15,11 +17,6 @@ function focusedPlace() {
   const pane = f?.pane ? panes().find((p) => p.pane === f.pane) : null;
   const on = f?.pane === null ? (f.terminal?.includes("/") ? f.terminal.split("/")[0] : null) : space?.machine ?? null;
   return { cwd: pane?.cwd || f?.cwd || space?.folder, on };
-}
-
-function openInBrowser(url) {
-  const opener = window()?.platform === "macos" ? "open" : "xdg-open";
-  exec(opener, [url]).catch((error) => notify({ title: "Could not open the link", body: `${error}`, level: "error" }));
 }
 
 // mise activates in interactive shells only, and Herdr's PATH comes from the login
@@ -251,7 +248,7 @@ export default class MyPrs extends View {
             ? svg("mods/workspace-chrome/check.svg").size(14).text_color(t.ansi2)
             : svg("mods/my-tabs/copy.svg").size(13)))
         .child(action("mr-browser")
-          .on_click(() => openInBrowser(mr.url))
+          .on_click(() => { openUrl(mr.url).catch(() => {}); })
           .child(this.opening === mr.id
             ? svg("mods/workspace-chrome/spinner.svg").size(14).text_color(t.accent).spin(900)
             : "↗")))));

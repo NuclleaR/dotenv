@@ -171,6 +171,56 @@ Standalone helpers: `./common/ssh.sh`, `./common/gpg.sh`, `./arch/drivers.sh`, `
 
 Edit the files in this repo — `~/.config/starship.toml` is a symlink and `~/.zshrc` only points here, so changes apply without re-running any setup.
 
+## Herdr
+
+```bash
+./common/herdr.sh
+herdr-app do layout.switch --name my-layout
+```
+
+Run it after cloning and after every Herdr update. It symlinks the mods in
+`herdr/mods` into `~/.config/herdr-app/mods`, creates
+`~/.config/herdr-app/my-links.json` from the example the first time, and rebuilds
+the `my-tabs` / `my-layout` clones from what the installed Herdr ships plus
+`herdr/patches/`. Restart Herdr after it when a mod got a new file.
+
+The tab bar gets side panels for MRs/PRs, Worktrees, Just and Docker. The sliders
+button at its end turns those and VS Code on or off per space, over a default.
+
+### Opening work links in another browser
+
+Ctrl+click on a link in a terminal, and the ↗ button in the MR panel, open the
+link in the system's default browser — unless `~/.config/herdr-app/my-links.json`
+names another browser for its host:
+
+```json
+{
+  "rules": [
+    { "hosts": ["gitlab.example.com", "*.atlassian.net"], "open": ["brave"] }
+  ]
+}
+```
+
+- `hosts` — exact host names, or `*.example.com` for every subdomain of
+  `example.com` (not `example.com` itself).
+- `open` — the browser command and its arguments; the URL is added last, e.g.
+  `["brave", "--profile-directory=Profile 1"]`.
+- Rules are tried in order and the first match wins; no match means the default
+  browser. A browser that is not installed falls back to the default one too.
+- The file is read on every click, so an edit applies at once. A broken rule is
+  skipped, the rest still work, and a notification says which one.
+
+Setup on a new machine:
+
+1. `./common/herdr.sh` — copies `herdr/my-links.example.json` to
+   `~/.config/herdr-app/my-links.json` if it is not there yet; it never
+   overwrites it.
+2. Put your hosts and browser into `~/.config/herdr-app/my-links.json`.
+3. Restart Herdr once, so the link handler and the layout load.
+
+The file is per machine on purpose: this repo is public, and the work hosts stay
+out of it. Only the example is committed.
+
 ## Conventions
 
 Every installer is idempotent: it checks whether the tool is already there and says so instead of reinstalling, and anything that writes to a config file looks for its own marker first. Existing user files are backed up, never silently overwritten. All output goes through the `log_info` / `log_success` / `log_warning` / `log_error` helpers in `common/logger.sh`.

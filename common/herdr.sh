@@ -2,7 +2,7 @@
 
 # Herdr app module (distribution independent)
 # Run it directly (./common/herdr.sh), also after every Herdr update, or source
-# it and call setup_herdr_mods / build_herdr_layout
+# it and call setup_herdr_mods / setup_herdr_links / build_herdr_layout
 
 COMMON_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -47,6 +47,24 @@ setup_herdr_mods() {
 
     log_info "Key bindings stay per machine, add to keys.json \"global\":"
     log_info "  \"cmd-shift-e\": \"mod.open:open-in-vscode\""
+}
+
+# Which hosts open in which browser, for Ctrl+click and the MR panel's ↗ button.
+# Per machine and never overwritten: work hosts stay out of this public repo, so
+# the repo only holds herdr/my-links.example.json, copied here the first time.
+setup_herdr_links() {
+    local example target="$HERDR_HOME/my-links.json"
+    example="$(cd "$COMMON_DIR/../herdr" && pwd)/my-links.example.json" || return 1
+
+    if [[ -e "$target" ]]; then
+        log_success "Herdr link rules already in $target"
+        return 0
+    fi
+
+    mkdir -p "$HERDR_HOME"
+    cp "$example" "$target"
+    log_success "Herdr link rules created from the example"
+    log_info "List the hosts and the browser to open them with in $target"
 }
 
 herdr_backup() {
@@ -112,7 +130,8 @@ assemble_my_tabs() {
     cp "$HERDR_HOME/layouts/main.json" "$out/shipped/main-layout.txt"
 }
 
-# Shipped main layout, pointed at my-tabs, with my-prs, my-worktrees, my-just and my-docker as more side panels
+# Shipped main layout, pointed at my-tabs, with my-prs, my-worktrees, my-just and my-docker as more side
+# panels, and my-prs first in link_handlers: its link.js routes Ctrl+click by my-links.json
 assemble_my_layout() {
     local out="$1" version="$2" shipped="$HERDR_HOME/layouts/main.json"
 
@@ -134,6 +153,7 @@ assemble_my_layout() {
             {id: "just", type: "block", content: {mod: "my-just"}},
             {id: "docker", type: "block", content: {mod: "my-docker"}}
           ]
+        | .link_handlers = (["my-prs"] + ((.link_handlers // []) - ["my-prs"]))
         | .cloned_from = {name: "main", version: $version}
     ' "$shipped" > "$out"
 }
@@ -230,5 +250,6 @@ build_herdr_layout() {
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
     set -euo pipefail
     setup_herdr_mods
+    setup_herdr_links
     build_herdr_layout
 fi

@@ -1,0 +1,8 @@
+{
+  "rules": [
+    {
+      "hosts": ["gitlab.example.com", "*.atlassian.net"],
+      "open": ["brave"]
+    }
+  ]
+}
