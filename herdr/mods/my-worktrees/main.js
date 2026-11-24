@@ -207,7 +207,9 @@ export default class MyWorktrees extends View {
           if (wt.prunable) await must(git, ["worktree", "prune"]);
           else await must(git, ["worktree", "remove", ...(decision === "force" ? ["--force"] : []), wt.path]);
           // Only once git has removed it: a refused removal must not kill the space's terminals.
-          if (now.space) run("space.close", { id: now.space });
+          // Confirmed already: the confirmation named this space, and a second question from
+          // Herdr, if declined, would leave the space on a folder that is gone.
+          if (now.space) run("space.close", { id: now.space, confirmed: true });
           this.confirm = null;
           // The head did not move since the confirmation, so its state still holds.
           if (wt.branch && confirm.state?.merged) {

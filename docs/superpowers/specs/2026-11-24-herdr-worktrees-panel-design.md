@@ -50,8 +50,9 @@ rebase-merge, which puts new commits on `main`, so `git branch --merged` and
   runs `git worktree remove --force`. Without changes it is a plain
   `git worktree remove`.
 - **Open space**: a Herdr space showing that worktree is closed
-  (`space.close {id}`) once git has removed the worktree, so a removal git
-  refuses leaves its terminals running. The confirmation names it.
+  (`space.close {id, confirmed: true}`) once git has removed the worktree, so a
+  removal git refuses leaves its terminals running. The confirmation names it,
+  so Herdr does not ask a second time.
 - **Local branch**: deleted only if merged. Otherwise kept, and the panel shows
   the reason.
 - **Merged check — forge first, then git** (approach 1 below).

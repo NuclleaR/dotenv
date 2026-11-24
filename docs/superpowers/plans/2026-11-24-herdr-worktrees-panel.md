@@ -58,6 +58,7 @@
 - Added at the user's request after the live run: an `N changes` chip on every row with uncommitted or untracked files, from `countChanges` (already tested) run for all worktrees at once each refresh; a worktree git cannot read counts as 0. Checked with `herdr-app check` only (UI).
 - Task 4 Step 5 stays unticked: `herdr-app check` passes and the user ran the panel live (list, `Current`, badges, the `Merged` bug above), but the delete flows were not confirmed live in this session.
 - Final: Ruling: whether `space.close` can be deferred by Herdr when processes run is unknown — the worktree is removed first now, so at worst a space stays open on a deleted folder — cost if wrong: a stale space to close by hand.
+  - Answered later: `herdr-app commands` says `space.close` "asks first unless confirmed". It now gets `confirmed: true`, since the panel's own confirmation already names the space; a declined second question would have left the space on a deleted folder.
 - Final: minor (deferred): ignored files (`.env`, local config) are deleted by `git worktree remove` without being named in the confirmation.
 - Final: minor (deferred): `git worktree prune` prunes every prunable entry, not only the clicked row (e.g. worktrees on an unmounted disk).
 - Final: minor (deferred): every rejection of glab/gh reads "is not installed"; a GitLab project that does not exist reads "Unexpected glab output: TypeError…".
