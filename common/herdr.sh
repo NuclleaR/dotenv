@@ -79,11 +79,13 @@ assemble_my_tabs() {
     # `r` must stay its own -e: BSD sed reads the file name up to the newline
     { printf 'import { repoSpace } from "./repo-space.js";\n'
       printf 'import { justSpace } from "./just-space.js";\n'
+      printf 'import { gitSpace } from "./git-space.js";\n'
+      printf 'import { myPanels, panelOn } from "./panels.js";\n'
       printf 'import { checkClones } from "./clone-check.js";\n'
       sed -e "/$anchor/r $patch_dir/button.js" \
           -e "/$sync/r $patch_dir/render-start.js" \
           -e 's|render() {|render(cx) {|' \
-          -e 's|shared("workspace.panels") ?? \["files", "changes"\]|[...(&), "merge-requests", "just", "docker"]|' \
+          -e 's|shared("workspace.panels") ?? \["files", "changes"\]|[...(&), ...myPanels()]|' \
           "$out/main.js"
     } > "$out/main.js.new"
     mv "$out/main.js.new" "$out/main.js"
@@ -99,7 +101,10 @@ assemble_my_tabs() {
 
     # After the path rewrite above: clone-check.js has to keep naming the shipped mod
     cp "$patch_dir/code.svg" "$patch_dir/merge-request.svg" "$patch_dir/just.svg" "$patch_dir/copy.svg" "$patch_dir/docker.svg" \
-        "$patch_dir/repo-space.js" "$patch_dir/just-space.js" "$patch_dir/clone-check.js" "$out/"
+        "$patch_dir/worktree.svg" "$patch_dir/sliders.svg" "$patch_dir/repo-space.js" "$patch_dir/just-space.js" \
+        "$patch_dir/git-space.js" "$patch_dir/panels.js" "$patch_dir/clone-check.js" "$out/"
+    # The Panels popup's store logic: panels.js reads the switches with the same code
+    cp "$COMMON_DIR/../herdr/mods/my-panels/switches.js" "$out/"
 
     # What this build came from, for clone-check.js. Not .js: Herdr must not load them
     mkdir -p "$out/shipped"
@@ -107,7 +112,7 @@ assemble_my_tabs() {
     cp "$HERDR_HOME/layouts/main.json" "$out/shipped/main-layout.txt"
 }
 
-# Shipped main layout, pointed at my-tabs, with my-prs, my-just and my-docker as more side panels
+# Shipped main layout, pointed at my-tabs, with my-prs, my-worktrees, my-just and my-docker as more side panels
 assemble_my_layout() {
     local out="$1" version="$2" shipped="$HERDR_HOME/layouts/main.json"
 
@@ -125,6 +130,7 @@ assemble_my_layout() {
         (.. | objects | select(.mod? == "tabs") | .mod) |= "my-tabs"
         | (.. | objects | select(.id? == "panel-body") | .children) += [
             {id: "merge-requests", type: "block", content: {mod: "my-prs"}},
+            {id: "worktrees", type: "block", content: {mod: "my-worktrees"}},
             {id: "just", type: "block", content: {mod: "my-just"}},
             {id: "docker", type: "block", content: {mod: "my-docker"}}
           ]
