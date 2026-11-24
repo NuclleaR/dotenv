@@ -119,7 +119,7 @@ assemble_my_tabs() {
 
     # After the path rewrite above: clone-check.js has to keep naming the shipped mod
     cp "$patch_dir/code.svg" "$patch_dir/merge-request.svg" "$patch_dir/just.svg" "$patch_dir/copy.svg" "$patch_dir/docker.svg" \
-        "$patch_dir/worktree.svg" "$patch_dir/sliders.svg" "$patch_dir/repo-space.js" "$patch_dir/just-space.js" \
+        "$patch_dir/worktree.svg" "$patch_dir/sliders.svg" "$patch_dir/branch.svg" "$patch_dir/approved.svg" "$patch_dir/repo-space.js" "$patch_dir/just-space.js" \
         "$patch_dir/git-space.js" "$patch_dir/panels.js" "$patch_dir/clone-check.js" "$out/"
     # The Panels popup's store logic: panels.js reads the switches with the same code
     cp "$COMMON_DIR/../herdr/mods/my-panels/switches.js" "$out/"

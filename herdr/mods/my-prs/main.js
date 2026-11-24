@@ -91,20 +91,24 @@ function githubCi(checks) {
   return "other";
 }
 
-// The REST list has no pipelines, and one request per MR would be 35 of them. CI is
-// a nicety, so a failure here leaves the list as it is, only without the dots.
-async function addGitlabCi(items, { host, path }) {
+// The REST list has no pipelines and no approvals, and one request per MR would be
+// 35 of them. Both are niceties, so a failure here leaves the list as it is, only
+// without the dots and the Approved chips.
+async function addGitlabDetails(items, { host, path }) {
   if (!items.length) return;
   const iids = items.map((item) => JSON.stringify(String(item.iid))).join(",");
-  const query = `query { project(fullPath: ${JSON.stringify(path)}) { mergeRequests(iids: [${iids}]) { nodes { iid headPipeline { status } } } } }`;
+  const query = `query { project(fullPath: ${JSON.stringify(path)}) { mergeRequests(iids: [${iids}]) { nodes { iid headPipeline { status } approvedBy { count } } } } }`;
   try {
     const result = await runTool("glab", ["api", "graphql", ...(host ? ["--hostname", host] : []), "-f", `query=${query}`]);
     if (result.code !== 0) return;
     const nodes = JSON.parse(result.stdout).data.project.mergeRequests.nodes;
-    const status = new Map(nodes.map((node) => [node.iid, node.headPipeline?.status]));
+    const details = new Map(nodes.map((node) => [node.iid, node]));
     for (const item of items) {
-      const value = status.get(String(item.iid));
+      const node = details.get(String(item.iid));
+      const value = node?.headPipeline?.status;
       item.ci = value ? GITLAB_CI[value] ?? "other" : null;
+      // One approval is enough; "Needs approval" already says when the rules want more.
+      item.approved = (node?.approvedBy?.count ?? 0) > 0;
     }
   } catch {}
 }
@@ -120,7 +124,7 @@ const FORGES = {
     ],
     item: (mr) => ({
       id: mr.id, title: mr.title, url: mr.web_url, draft: mr.draft, ref: mr.references.full, labels: mr.labels,
-      branch: mr.source_branch, updated: mr.updated_at, iid: mr.iid, ci: null,
+      branch: mr.source_branch, updated: mr.updated_at, iid: mr.iid, ci: null, approved: false,
       // A draft or an unresolved thread hides a conflict from detailed_merge_status.
       status: mr.has_conflicts ? GITLAB_STATUS.conflict : gitlabStatus(mr.detailed_merge_status),
       comments: mr.user_notes_count,
@@ -131,13 +135,15 @@ const FORGES = {
     title: "Pull requests",
     args: ({ host, path }) => [
       "pr", "list", "--repo", host ? `${host}/${path}` : path, "--author", "@me", "--state", "open",
-      "--limit", "50", "--json", "number,title,url,isDraft,headRefName,updatedAt,statusCheckRollup,labels,mergeable,mergeStateStatus,reviewDecision,comments",
+      "--limit", "50", "--json", "number,title,url,isDraft,headRefName,updatedAt,statusCheckRollup,labels,mergeable,mergeStateStatus,reviewDecision,latestReviews,comments",
     ],
     item: (pr, { path }) => ({
       id: pr.number, title: pr.title, url: pr.url, draft: pr.isDraft, ref: `${path}#${pr.number}`,
       branch: pr.headRefName, updated: pr.updatedAt, ci: githubCi(pr.statusCheckRollup),
       labels: pr.labels.map((l) => ({ name: l.name, color: `#${l.color}`, text_color: textOn(l.color) })),
       status: githubStatus(pr), comments: pr.comments.length,
+      // Each reviewer's last review: one of them approving is enough.
+      approved: pr.latestReviews.some((review) => review.state === "APPROVED"),
     }),
   },
 };
@@ -159,7 +165,7 @@ async function fetchItems(repo) {
     const items = JSON.parse(result.stdout).map((item) => forge.item(item, repo));
     // Most recently updated first. gh has no reliable order of its own for this.
     items.sort((a, b) => Date.parse(b.updated) - Date.parse(a.updated));
-    if (repo.forge === "gitlab") await addGitlabCi(items, repo);
+    if (repo.forge === "gitlab") await addGitlabDetails(items, repo);
     return { items, error: null };
   } catch (error) {
     return { error: `Unexpected ${forge.tool} output: ${error}` };
@@ -206,13 +212,15 @@ export default class MyPrs extends View {
     });
   }
 
-  // For a browser that isn't the system's default, where `open` would land.
-  copyLink(mr, cx) {
-    cx.write_to_clipboard(mr.url);
-    this.copied = mr.id;
+  // The link: for a browser that isn't the system's default, where `open` would land.
+  // The branch: for a checkout or a command that needs its name.
+  copy(mr, what, text, cx) {
+    const key = `${what}-${mr.id}`;
+    cx.write_to_clipboard(text);
+    this.copied = key;
     cx.notify();
     cx.timer.after(1500, (cx) => {
-      if (this.copied !== mr.id) return;
+      if (this.copied !== key) return;
       this.copied = null;
       cx.notify();
     });
@@ -241,10 +249,18 @@ export default class MyPrs extends View {
         .when(mr.comments > 0, (e) => e.child(div().text_color(t.dim).child(`${mr.comments} ${mr.comments === 1 ? "comment" : "comments"}`)))
         .when(Boolean(mr.ci), (e) => e.child(div().flex_none().size(8).rounded(4).bg(ciColor[mr.ci])))
         .when(Boolean(mr.status), (e) => e.child(div().text_color(statusColor[mr.status.kind]).child(mr.status.text)))
+        .when(mr.approved, (e) => e.child(h_flex().items_center().gap(3).text_color(t.ansi2)
+          .child(svg("mods/my-tabs/approved.svg").size(12).text_color(t.ansi2))
+          .child("Approved")))
         .child(h_flex()
+        .child(action("mr-branch")
+          .on_click((_e, cx) => this.copy(mr, "branch", mr.branch, cx))
+          .child(this.copied === `branch-${mr.id}`
+            ? svg("mods/workspace-chrome/check.svg").size(14).text_color(t.ansi2)
+            : svg("mods/my-tabs/branch.svg").size(13)))
         .child(action("mr-copy")
-          .on_click((_e, cx) => this.copyLink(mr, cx))
-          .child(this.copied === mr.id
+          .on_click((_e, cx) => this.copy(mr, "link", mr.url, cx))
+          .child(this.copied === `link-${mr.id}`
             ? svg("mods/workspace-chrome/check.svg").size(14).text_color(t.ansi2)
             : svg("mods/my-tabs/copy.svg").size(13)))
         .child(action("mr-browser")
